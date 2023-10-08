@@ -59,7 +59,8 @@ class Trainer:
         print('available Device:'+network.device)
         if (network.device == 'cuda' and (self.gpu_number > 1)):
             network=nn.DataParallel(network,list(range(self.gpu_number)))
-  
+
+        return network
     
 class DNN(nn.Module):
 
@@ -120,7 +121,7 @@ class Generator(nn.Module):
 
         self.ngpu = ngpu            
 
-        self.conv1 = nn.ConvTranspose2d(input_size, mapping_size * 8, kernel_size=6, stride=1, padding=0, bias=False)
+        self.conv1 = nn.ConvTranspose2d(input_size, mapping_size * 8, 6, 1, 0, bias=False)
         self.conv2 = nn.BatchNorm2d(num_features=mapping_size * 8)
         self.conv3 = nn.ReLU(True)
         self.conv4 = nn.ConvTranspose2d(mapping_size * 8, mapping_size * 4, 6, 2, 2, bias=False)
