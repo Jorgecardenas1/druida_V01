@@ -6,7 +6,7 @@ import torch.nn.functional as F
 """We need to develop an encoder-bottle neck- decoder architecture"""
 
 class UNet(nn.Module):
-    def __init__(self, c_in=3, c_out=3, time_dim=256, device="cpu"):
+    def __init__(self,device, c_in=3, c_out=3, time_dim=256):
         super().__init__()
         self.device = device
         self.time_dim = time_dim
@@ -46,7 +46,7 @@ class UNet(nn.Module):
         pos_enc_a = torch.sin(t.repeat(1, channels // 2) * inv_freq)
         pos_enc_b = torch.cos(t.repeat(1, channels // 2) * inv_freq)
         pos_enc = torch.cat([pos_enc_a, pos_enc_b], dim=-1)
-        return pos_enc
+        return pos_enc.to(self.device)
 
     def forward(self, x, t): #noised images and time steps
         t = t.unsqueeze(-1).type(torch.float)

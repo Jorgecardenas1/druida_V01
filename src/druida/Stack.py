@@ -97,13 +97,13 @@ class Trainer:
 
         dataloader = utils.get_data(args.image_size, args.dataset_path,self.batch_size)
 
-        model = toolkit.UNet().to(device)
+        model = toolkit.UNet(device=self.device,c_in=3, c_out=3, time_dim=256).to(device)
 
         optimizer = optim.AdamW(model.parameters(), lr=self.learning_rate)
 
         mse = nn.MSELoss()
 
-        diffusion = Diffusion(img_size=args.image_size, device=device)
+        diffusion = Diffusion(img_size=args.image_size, device=device,noise_steps=1000, beta_start=1e-4, beta_end=0.02).to(device)
 
         logger = SummaryWriter(os.path.join("runs", self.run_name))
 
@@ -324,7 +324,7 @@ class Discriminator(nn.Module):
 
 class Diffusion:
 
-    def __init__(self, noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=64, device="cpu"):
+    def __init__(self,device, noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=64 ):
         self.noise_steps = noise_steps
         self.beta_start = beta_start
         self.beta_end = beta_end
