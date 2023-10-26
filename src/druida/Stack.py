@@ -187,17 +187,17 @@ class Trainer:
                 logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
             if epoch % 10 == 0:
-                labels = torch.arange(2).long().to(device)
+                labels = torch.arange(args.num_classes).long().to(device)
                 print(labels)
                 print(len(labels))
                 sampled_images = diffusion.sample_cdm(model, n=len(labels), labels=labels)
                 ema_sampled_images = diffusion.sample_cdm(ema_model, n=len(labels), labels=labels)
                 utils.plot_images(sampled_images)
-                utils.save_images(sampled_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
-                utils.save_images(ema_sampled_images, os.path.join("results", args.run_name, f"{epoch}_ema.jpg"))
-                torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
-                torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
-                torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim.pt"))
+                utils.save_images(sampled_images, os.path.join("results", self.run_name, f"{epoch}.jpg"))
+                utils.save_images(ema_sampled_images, os.path.join("results", self.run_name, f"{epoch}_ema.jpg"))
+                torch.save(model.state_dict(), os.path.join("models", self.run_name, f"ckpt.pt"))
+                torch.save(ema_model.state_dict(), os.path.join("models", self.run_name, f"ema_ckpt.pt"))
+                torch.save(optimizer.state_dict(), os.path.join("models", self.run_name, f"optim.pt"))
 
 
 
