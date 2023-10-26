@@ -10,6 +10,8 @@ import torch.nn.functional as F
 sys.path.insert(0, '../druida_V01/src/')
 
 import os
+import copy
+
 import torch
 import torch.nn as nn
 
@@ -103,7 +105,7 @@ class Trainer:
 
         mse = nn.MSELoss()
 
-        diffusion = Diffusion(img_size=args.image_size, device=device,noise_steps=1000, beta_start=1e-4, beta_end=0.02).to(device)
+        diffusion = Diffusion(img_size=args.image_size, device=device,noise_steps=1000, beta_start=1e-4, beta_end=0.02)
 
         logger = SummaryWriter(os.path.join("runs", self.run_name))
 
@@ -142,6 +144,61 @@ class Trainer:
 
             utils.save_images(sampled_images, os.path.join("results", self.run_name, f"{epoch}.jpg"))
             torch.save(model.state_dict(), os.path.join("models", self.run_name, f"ckpt.pt"))
+
+
+    def train_CDM(self,args):
+
+        utils.setup_logging(self.run_name)
+        device = self.device
+        dataloader = utils.get_data(args.image_size, args.dataset_path,self.batch_size)
+        model = toolkit.UNet_conditional(device=self.device,c_in=3, c_out=3, time_dim=256,num_classes=args.num_classes).to(device)
+        
+        optimizer = optim.AdamW(model.parameters(), lr=self.learning_rate)
+
+        mse = nn.MSELoss()
+        diffusion = Diffusion(img_size=args.image_size, device=device)
+        logger = SummaryWriter(os.path.join("runs", self.run_name))
+        l = len(dataloader)
+
+        ema = toolkit.EMA(0.995)
+        ema_model = copy.deepcopy(model).eval().requires_grad_(False)
+
+        for epoch in range(self.epochs):
+
+            logging.info(f"Starting epoch {epoch}:")
+            pbar = tqdm(dataloader)
+
+            for i, (images, labels) in enumerate(pbar):
+                images = images.to(device)
+                labels = labels.to(device)
+                t = diffusion.sample_timesteps(images.shape[0]).to(device)
+                x_t, noise = diffusion.noise_images(images, t)
+                if np.random.random() < 0.1:
+                    labels = None
+                predicted_noise = model(x_t, t, labels)
+                loss = mse(noise, predicted_noise)
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                ema.step_ema(ema_model, model)
+
+                pbar.set_postfix(MSE=loss.item())
+                logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
+
+            if epoch % 10 == 0:
+                labels = torch.arange(2).long().to(device)
+                print(labels)
+                print(len(labels))
+                sampled_images = diffusion.sample_cdm(model, n=len(labels), labels=labels)
+                ema_sampled_images = diffusion.sample_cdm(ema_model, n=len(labels), labels=labels)
+                utils.plot_images(sampled_images)
+                utils.save_images(sampled_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
+                utils.save_images(ema_sampled_images, os.path.join("results", args.run_name, f"{epoch}_ema.jpg"))
+                torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
+                torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
+                torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim.pt"))
+
 
 
 
@@ -394,6 +451,31 @@ class Diffusion:
         model.train()
         x = (x.clamp(-1, 1) + 1) / 2 #make all values between 0 and 1 
         x = (x * 255).type(torch.uint8) #valid pixel range
+        return x
+    
+
+    def sample_cdm(self, model, n, labels, cfg_scale=3):
+        logging.info(f"Sampling {n} new images....")
+        model.eval()
+        with torch.no_grad():
+            x = torch.randn((n, 3, self.img_size, self.img_size)).to(self.device)
+            for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
+                t = (torch.ones(n) * i).long().to(self.device)
+                predicted_noise = model(x, t, labels)
+                if cfg_scale > 0:
+                    uncond_predicted_noise = model(x, t, None)
+                    predicted_noise = torch.lerp(uncond_predicted_noise, predicted_noise, cfg_scale)
+                alpha = self.alpha[t][:, None, None, None]
+                alpha_hat = self.alpha_hat[t][:, None, None, None]
+                beta = self.beta[t][:, None, None, None]
+                if i > 1:
+                    noise = torch.randn_like(x)
+                else:
+                    noise = torch.zeros_like(x)
+                x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted_noise) + torch.sqrt(beta) * noise
+        model.train()
+        x = (x.clamp(-1, 1) + 1) / 2
+        x = (x * 255).type(torch.uint8)
         return x
 
 
