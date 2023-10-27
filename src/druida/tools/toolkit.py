@@ -5,6 +5,7 @@ import torch.nn.functional as F
 
 """We need to develop an encoder-bottle neck- decoder architecture"""
 
+#Exponential Moving Average
 class EMA:
     def __init__(self, beta):
         super().__init__()

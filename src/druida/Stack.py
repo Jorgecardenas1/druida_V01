@@ -160,6 +160,7 @@ class Trainer:
         logger = SummaryWriter(os.path.join("runs", self.run_name))
         l = len(dataloader)
 
+        #Exponential Moving Average
         ema = toolkit.EMA(0.995)
         ema_model = copy.deepcopy(model).eval().requires_grad_(False)
 
@@ -173,8 +174,12 @@ class Trainer:
                 labels = labels.to(device)
                 t = diffusion.sample_timesteps(images.shape[0]).to(device)
                 x_t, noise = diffusion.noise_images(images, t)
+
+                #This is for the model to train 10% of the time with no labels
+                #Classifier free diffusion guidance
                 if np.random.random() < 0.1:
                     labels = None
+
                 predicted_noise = model(x_t, t, labels)
                 loss = mse(noise, predicted_noise)
 
@@ -462,9 +467,14 @@ class Diffusion:
             for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
                 t = (torch.ones(n) * i).long().to(self.device)
                 predicted_noise = model(x, t, labels)
+
+                #This is to enable CFG conditional fre guidance
+                #torch lerp interpolates the unconditional predicted noise
+
                 if cfg_scale > 0:
                     uncond_predicted_noise = model(x, t, None)
                     predicted_noise = torch.lerp(uncond_predicted_noise, predicted_noise, cfg_scale)
+
                 alpha = self.alpha[t][:, None, None, None]
                 alpha_hat = self.alpha_hat[t][:, None, None, None]
                 beta = self.beta[t][:, None, None, None]
