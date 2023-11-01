@@ -13,6 +13,7 @@ class EMA:
         self.step = 0
 
     def update_model_average(self, ma_model, current_model):
+
         for current_params, ma_params in zip(current_model.parameters(), ma_model.parameters()):
             old_weight, up_weight = ma_params.data, current_params.data
             ma_params.data = self.update_average(old_weight, up_weight)
@@ -26,12 +27,17 @@ class EMA:
         if self.step < step_start_ema:
             self.reset_parameters(ema_model, model)
             self.step += 1
+            #increasing through iterations
             return
+        
         self.update_model_average(ema_model, model)
         self.step += 1
 
     def reset_parameters(self, ema_model, model):
-        ema_model.load_state_dict(model.state_dict())
+
+        #replicate model params into ema-model
+        ema_model.load_state_dict(model.state_dict()) 
+        #state_dict is simply a Python dictionary object that maps each layer to its parameter tensor
 
 
 class UNet(nn.Module):
@@ -39,6 +45,10 @@ class UNet(nn.Module):
         super().__init__()
         self.device = device
         self.time_dim = time_dim
+
+        #here we find the full
+        #Unet pipeline
+        #every step 
 
         #Encoder
         self.inc = DoubleConv(c_in, 64)
@@ -108,11 +118,12 @@ class UNet(nn.Module):
     
 
 class UNet_conditional(nn.Module):
-    def __init__(self,device,  c_in=3, c_out=3, time_dim=256, num_classes=None):
+    def __init__(self,device,  channel_in=3, channel_out=3, time_dim=256, num_classes=None):
         super().__init__()
+        
         self.device = device
         self.time_dim = time_dim
-        self.inc = DoubleConv(c_in, 64)
+        self.inc = DoubleConv(channel_in, 64)
         self.down1 = DownScaler(64, 128)
         self.sa1 = SelfAttention(128, 32)
         self.down2 = DownScaler(128, 256)
@@ -130,7 +141,7 @@ class UNet_conditional(nn.Module):
         self.sa5 = SelfAttention(64, 32)
         self.up3 = UpScaler(128, 64)
         self.sa6 = SelfAttention(64, 64)
-        self.outc = nn.Conv2d(64, c_out, kernel_size=1)
+        self.outc = nn.Conv2d(64, channel_out, kernel_size=1)
 
         if num_classes is not None:
             self.label_emb = nn.Embedding(num_classes, time_dim)
@@ -145,12 +156,16 @@ class UNet_conditional(nn.Module):
         pos_enc = torch.cat([pos_enc_a, pos_enc_b], dim=-1)
         return pos_enc
 
-    def forward(self, x, t, y):
+    def forward(self, x, t, conditional_labels):
+
+        # unsqueeze turns an n.d. tensor into an (n+1).d. one by adding an extra dimension of depth 1.
+        #unsqueeze(-1) adds a new dimension after the last index,
         t = t.unsqueeze(-1).type(torch.float)
         t = self.pos_encoding(t, self.time_dim)
 
-        if y is not None:
-            t += self.label_emb(y)
+        if conditional_labels is not None:
+            t += self.label_emb(conditional_labels)
+            #adding embedded labels to positional encoded time steps
 
         x1 = self.inc(x)
         x2 = self.down1(x1, t)
@@ -190,7 +205,7 @@ class DoubleConv(nn.Module):
         self.double_conv = nn.Sequential(
             nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
             nn.GroupNorm(1, mid_channels),
-            nn.GELU(), #Gaussian Error Linear Units
+            nn.GELU(), #Gaussian Error Linear Units En lugar del RELU tradicional
             nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False),
             nn.GroupNorm(1, out_channels),
         )
@@ -249,10 +264,6 @@ class UpScaler(nn.Module):
     def forward(self, x, skip_x, t):
         x = self.up(x)
 
-
-        #we concatenat
-        #(x4, x3, t) X3 comes from the encoder
-        
         x = torch.cat([skip_x, x], dim=1)
 
         x = self.conv(x)
@@ -263,6 +274,7 @@ class UpScaler(nn.Module):
 class SelfAttention(nn.Module):
     def __init__(self, channels, size):
         super(SelfAttention, self).__init__()
+
         self.channels = channels
         self.size = size
 

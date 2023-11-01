@@ -151,7 +151,7 @@ class Trainer:
         utils.setup_logging(self.run_name)
         device = self.device
         dataloader = utils.get_data(args.image_size, args.dataset_path,self.batch_size)
-        model = toolkit.UNet_conditional(device=self.device,c_in=3, c_out=3, time_dim=256,num_classes=args.num_classes).to(device)
+        model = toolkit.UNet_conditional(device=self.device,channel_in=3, channel_out=3, time_dim=256,num_classes=args.num_classes).to(device)
         
         optimizer = optim.AdamW(model.parameters(), lr=self.learning_rate)
 
@@ -161,7 +161,11 @@ class Trainer:
         l = len(dataloader)
 
         #Exponential Moving Average
+        #We make a copy of the model in order to have a 
+        #version in which we use EMA and one without it.
+
         ema = toolkit.EMA(0.995)
+
         ema_model = copy.deepcopy(model).eval().requires_grad_(False)
 
         for epoch in range(self.epochs):
@@ -170,31 +174,44 @@ class Trainer:
             pbar = tqdm(dataloader)
 
             for i, (images, labels) in enumerate(pbar):
+
                 images = images.to(device)
                 labels = labels.to(device)
-                t = diffusion.sample_timesteps(images.shape[0]).to(device)
-                x_t, noise = diffusion.noise_images(images, t)
+
+
+                t = diffusion.sample_timesteps(images.shape[0]).to(device)#Sampling time steps
+                x_t, noise = diffusion.noise_images(images, t) #add noise
 
                 #This is for the model to train 10% of the time with no labels
                 #Classifier free diffusion guidance
+                #Si no hay labels se entrena el clasificador sin condición
                 if np.random.random() < 0.1:
                     labels = None
 
+
                 predicted_noise = model(x_t, t, labels)
+                #recibe imagenes con ruido, pasos de tiempo y labels
                 loss = mse(noise, predicted_noise)
 
                 optimizer.zero_grad()
                 loss.backward()
+
                 optimizer.step()
+
+                #Apply Ema to model
+
                 ema.step_ema(ema_model, model)
 
                 pbar.set_postfix(MSE=loss.item())
+
                 logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
             if epoch % 10 == 0:
+
                 labels = torch.arange(args.num_classes).long().to(device)
                 print(labels)
                 print(len(labels))
+
                 sampled_images = diffusion.sample_cdm(model, n=len(labels), labels=labels)
                 ema_sampled_images = diffusion.sample_cdm(ema_model, n=len(labels), labels=labels)
                 utils.plot_images(sampled_images)
@@ -410,6 +427,8 @@ class Diffusion:
         #the other way is to doit all at once
         sqrt_alpha_hat = torch.sqrt(self.alpha_hat[t])[:, None, None, None]
         sqrt_one_minus_alpha_hat = torch.sqrt(1 - self.alpha_hat[t])[:, None, None, None]
+
+        #noise
         Ɛ = torch.randn_like(x)
         return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * Ɛ, Ɛ
 
