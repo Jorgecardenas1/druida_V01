@@ -143,6 +143,8 @@ class UNet_conditional(nn.Module):
         self.sa6 = SelfAttention(64, 64)
         self.outc = nn.Conv2d(64, channel_out, kernel_size=1)
 
+
+        #giving the capacity to train with or without classes or labels
         if num_classes is not None:
             self.label_emb = nn.Embedding(num_classes, time_dim)
 
