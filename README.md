@@ -3,7 +3,7 @@
 
 [![N|Solid](https://cldup.com/dTxpPi9lDf.thumb.png)](https://nodesource.com/products/nsolid)
 
-[![Build Status](0.0.17)](https://pypi.org/project/druida/)
+[![Build Status]]((0.0.17)](https://pypi.org/project/druida/))
 
 Druida is an artificial intelligence developed support the metasurfaces design process.
 
