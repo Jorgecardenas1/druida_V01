@@ -3,8 +3,6 @@
 
 [![N|Solid](https://cldup.com/dTxpPi9lDf.thumb.png)](https://nodesource.com/products/nsolid)
 
-[![Build Status]]((0.0.17)](https://pypi.org/project/druida/))
-
 Druida is an artificial intelligence developed support the metasurfaces design process.
 
 - Generative pipelines for metasurfaces design
@@ -37,21 +35,13 @@ Dillinger uses a number of open source projects to work properly:
 
 ## Installation
 
-Dillinger requires [Node.js](https://nodejs.org/) v10+ to run.
 
 Install the dependencies and devDependencies and start the server.
+https://pypi.org/project/druida/
 
 ```sh
-cd dillinger
-npm i
-node app
-```
+pip install druida
 
-For production environments...
-
-```sh
-npm install --production
-NODE_ENV=production node app
 ```
 
 ## Plugins
