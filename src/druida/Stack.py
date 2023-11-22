@@ -20,6 +20,8 @@ from torch import optim
 #from utils import *
 
 import logging 
+import matplotlib.pyplot as plt
+
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -28,10 +30,30 @@ from .tools import utils
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
 
-
+#Used to implement any prediction process
 class Predictor:
-    pass
+    def __init__(self):
+        
+        self.checkDevice()
 
+    def generate_VAE(self,mean, var, model):
+        z_sample = torch.tensor([[mean, var]], dtype=torch.float).to(self.device)
+        x_decoded = model.decode(z_sample)
+        #image = x_decoded.detach().cpu().reshape(64, 64,3) # reshape vector to 2d array
+        
+        return x_decoded
+
+
+    def checkDevice(self):
+        self.device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+        )
+
+# All training modules for the different algorithms used
 class Trainer:
     
 
@@ -91,6 +113,59 @@ class Trainer:
         return network
     
 
+    #Traininga  VAE
+    def train_VAE(self,args):
+        
+        utils.setup_logging(self.run_name)
+
+        model = toolkit.VAE().to(self.device)
+        optimizer = optim.Adam(model.parameters(), lr=self.learning_rate)   
+        dataloader = utils.get_data_denormalize(args.image_size, args.dataset_path,self.batch_size)
+        trainingLoss=[]
+
+        logging.info(f"Starting epoch {self.epochs}:")
+        
+        pbar = tqdm(dataloader)
+        model.train()
+
+        for epoch in range(self.epochs):
+            overall_loss = 0
+
+            for batch_idx, (x, _) in enumerate(pbar):
+                
+                images=x.to(self.device)
+                images = (images.clamp(-1, 1) + 1) / 2 #make all values between 0 and 1 
+                #images = (x * 255).type(torch.uint8) #valid pixel range
+                #images=images.reshape(self.batch_size,-1).to(self.device)
+                images = images.view(self.batch_size, 64*64*3).to(self.device)
+                optimizer.zero_grad()
+
+                x_hat, mean, log_var = model(images)
+                loss = self.loss_function(images, x_hat, mean, log_var)
+                
+                overall_loss += loss.item()
+                
+                loss.backward()
+                optimizer.step()
+            
+            trainingLoss.append(overall_loss)
+
+
+            print("\tEpoch", epoch + 1, "\tAverage Loss: ", overall_loss/(batch_idx*self.batch_size))
+        return trainingLoss,overall_loss, model
+
+
+    def loss_function(self,x, x_hat, mean, log_var):
+     
+        reproduction_loss = nn.functional.binary_cross_entropy(x_hat, x, reduction='sum')
+
+        KLD = - 0.5 * torch.sum(1+ log_var - mean.pow(2) - log_var.exp())
+
+        return reproduction_loss + KLD
+    
+
+    #N Training an unconditional diffusion model
+
     def train_DM(self,args):
 
         utils.setup_logging(self.run_name)
@@ -149,6 +224,7 @@ class Trainer:
     def train_CDM(self,args):
 
         utils.setup_logging(self.run_name)
+
         device = self.device
         dataloader = utils.get_data(args.image_size, args.dataset_path,self.batch_size)
         model = toolkit.UNet_conditional(device=self.device,channel_in=3, channel_out=3, time_dim=256,num_classes=args.num_classes).to(device)
@@ -156,6 +232,7 @@ class Trainer:
         optimizer = optim.AdamW(model.parameters(), lr=self.learning_rate)
 
         mse = nn.MSELoss()
+
         diffusion = Diffusion(img_size=args.image_size, device=device)
         logger = SummaryWriter(os.path.join("runs", self.run_name))
         l = len(dataloader)
@@ -224,7 +301,7 @@ class Trainer:
 
 
 
-    
+#Build a DNN stack 
     
 class DNN(nn.Module):
 
@@ -275,6 +352,7 @@ class DNN(nn.Module):
     
 
 
+#Build a Generator for GAN stack 
 
 class Generator(nn.Module):
     def __init__(self, ngpu, input_size, mapping_size, channels ):
@@ -328,6 +406,7 @@ class Generator(nn.Module):
         )
     
 
+#Build a Discriminator for GAN stack 
 
 class Discriminator(nn.Module):
     def __init__(self, ngpu=0, image_size=32, discriminator_mapping_size=0, channels=3):
@@ -397,9 +476,7 @@ class Discriminator(nn.Module):
         )
     
 
-
-
-
+#Build a Diffusion  model pipeline
 
 class Diffusion:
 
@@ -506,5 +583,6 @@ class Diffusion:
         x = (x.clamp(-1, 1) + 1) / 2
         x = (x * 255).type(torch.uint8)
         return x
+
 
 

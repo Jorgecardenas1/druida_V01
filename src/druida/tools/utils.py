@@ -7,7 +7,9 @@ from torch.utils.data import DataLoader
 
 
 def plot_images(images):
-    plt.figure(figsize=(32, 32))
+
+    
+    plt.figure(figsize=(16, 16))
     plt.imshow(torch.cat([
         torch.cat([i for i in images.cpu()], dim=-1),
     ], dim=-2).permute(1, 2, 0).cpu())
@@ -28,12 +30,34 @@ def get_data(image_size, dataset_path,batch_size):
         torchvision.transforms.Resize(80),  # args.image_size + 1/4 *args.image_size
         torchvision.transforms.RandomResizedCrop(image_size, scale=(0.8, 1.0)),
         torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
     dataset = torchvision.datasets.ImageFolder(dataset_path, transform=transforms)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    #returns a data loader with normalized images
+
+    return dataloader
+
+def get_data_denormalize(image_size, dataset_path,batch_size):
+
+    transforms = torchvision.transforms.Compose([
+        torchvision.transforms.Resize(80),  # args.image_size + 1/4 *args.image_size
+        torchvision.transforms.RandomResizedCrop(image_size, scale=(0.8, 2.0)),
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+
+    ])
+
+    #Ojo realmente si se necesita normalizar transforms.Normalize((0.1307,), (0.3081,))
+    dataset = torchvision.datasets.ImageFolder(dataset_path, transform=transforms)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    #for inputs, targets in dataloader:
+    #    print(inputs.size())
+    #    print(targets.size())
 
     #returns a data loader with normalized images
+
     return dataloader
 
 

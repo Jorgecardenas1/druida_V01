@@ -189,6 +189,85 @@ class UNet_conditional(nn.Module):
         x = self.sa6(x)
         output = self.outc(x)
         return output
+    
+
+class UNet_LatentConditional(nn.Module):
+    def __init__(self,device,  channel_in=3, channel_out=3, time_dim=256, num_classes=None):
+        super().__init__()
+        
+        self.device = device
+        self.time_dim = time_dim
+        self.inc = DoubleConv(channel_in, 64)
+        self.down1 = DownScaler(64, 128)
+        self.sa1 = SelfAttention(128, 32)
+        self.down2 = DownScaler(128, 256)
+        self.sa2 = SelfAttention(256, 16)
+        self.down3 = DownScaler(256, 256)
+        self.sa3 = SelfAttention(256, 8)
+
+        self.bot1 = DoubleConv(256, 512)
+        self.bot2 = DoubleConv(512, 512)
+        self.bot3 = DoubleConv(512, 256)
+
+        self.up1 = UpScaler(512, 128)
+        self.sa4 = SelfAttention(128, 16)
+        self.up2 = UpScaler(256, 64)
+        self.sa5 = SelfAttention(64, 32)
+        self.up3 = UpScaler(128, 64)
+        self.sa6 = SelfAttention(64, 64)
+        self.outc = nn.Conv2d(64, channel_out, kernel_size=1)
+
+
+        #giving the capacity to train with or without classes or labels
+        #num_classes tensors of size time dim
+
+        if num_classes is not None:
+            self.label_emb = nn.Embedding(num_classes, time_dim)
+
+    def pos_encoding(self, t, channels):
+        inv_freq = 1.0 / (
+            10000
+            ** (torch.arange(0, channels, 2, device=self.device).float() / channels)
+        )
+        pos_enc_a = torch.sin(t.repeat(1, channels // 2) * inv_freq)
+        pos_enc_b = torch.cos(t.repeat(1, channels // 2) * inv_freq)
+        pos_enc = torch.cat([pos_enc_a, pos_enc_b], dim=-1)
+        return pos_enc
+
+    def forward(self, x, t, conditional_labels):
+
+        # unsqueeze turns an n.d. tensor into an (n+1).d. one by adding an extra dimension of depth 1.
+        #unsqueeze(-1) adds a new dimension after the last index,
+        t = t.unsqueeze(-1).type(torch.float)
+
+        #Proeduce a time encoding for each class tensor for each time step
+        t = self.pos_encoding(t, self.time_dim)
+
+        if conditional_labels is not None:
+            t += self.label_emb(conditional_labels)
+            #adding embedded labels to positional encoded time steps
+
+        x1 = self.inc(x)
+        x2 = self.down1(x1, t)
+        x2 = self.sa1(x2)
+        x3 = self.down2(x2, t)
+        x3 = self.sa2(x3)
+        x4 = self.down3(x3, t)
+        x4 = self.sa3(x4)
+
+        x4 = self.bot1(x4)
+        x4 = self.bot2(x4)
+        x4 = self.bot3(x4)
+
+        x = self.up1(x4, x3, t)
+        x = self.sa4(x)
+        x = self.up2(x, x2, t)
+        x = self.sa5(x)
+        x = self.up3(x, x1, t)
+        x = self.sa6(x)
+        output = self.outc(x)
+        return output
+
 
 # two convolutaional layers
 # 
@@ -298,3 +377,57 @@ class SelfAttention(nn.Module):
         attention_value = attention_value + x
         attention_value = self.ff_self(attention_value) + attention_value
         return attention_value.swapaxes(2, 1).view(-1, self.channels, self.size, self.size) #flattening and making channel last
+
+
+class VAE(nn.Module):
+
+    def __init__(self, input_dim=(64*64*3), hidden_dim=400, latent_dim=200, device="cpu"):
+       
+        super(VAE, self).__init__()
+        self.device=device
+        # encoder
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_dim, latent_dim),
+            nn.LeakyReLU(0.2)
+            )
+        
+        # latent mean and variance 
+        self.mean_layer = nn.Linear(latent_dim, 2)
+        self.logvar_layer = nn.Linear(latent_dim, 2)
+        
+        # decoder
+        self.decoder = nn.Sequential(
+            nn.Linear(2, latent_dim),
+            nn.LeakyReLU(0.2),
+            nn.Linear(latent_dim, hidden_dim),
+            nn.LeakyReLU(0.2),
+            nn.Linear(hidden_dim, input_dim),
+            nn.Sigmoid()
+            )
+     
+    def encode(self, x):
+        x = self.encoder(x)
+        mean, logvar = self.mean_layer(x), self.logvar_layer(x)
+        return mean, logvar
+
+    def reparameterization(self, mean, var):
+        epsilon = torch.randn_like(var).to(self.device)      
+        z = mean + var*epsilon
+        return z
+
+    def decode(self, x):
+        return self.decoder(x)
+
+        # def forward(self, x):
+        #     mean, log_var = self.encode(x)
+        #     z = self.reparameterization(mean, log_var)
+        #     x_hat = self.decode(z)
+        #     return x_hat, mean, log_var
+        
+    def forward(self, x):
+        mean, log_var = self.encode(x)
+        z = self.reparameterization(mean, torch.exp(0.5 * log_var)) 
+        x_hat = self.decode(z)  
+        return x_hat, mean, log_var
