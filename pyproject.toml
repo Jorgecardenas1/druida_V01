@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "druida"
-version = "0.0.18"
+version = "0.0.19"
 authors = [
   { name="Jorge Cardenas", email="jorge.cardenas.l@mail.pucv.cl" },
 ]
@@ -29,7 +29,9 @@ dependencies = [
   "matplotlib",
   "tqdm",
   "pillow",
-  "transformers"
+  "transformers",
+  "ezdxf",
+  "imutils"
   ]
 
 

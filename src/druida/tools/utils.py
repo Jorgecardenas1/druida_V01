@@ -6,9 +6,13 @@ from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
 
 import numpy as np
-import cv2
+import cv2 as cv
 import os
 import glob
+import ezdxf
+import imutils
+
+
 
 def plot_images(images):
 
@@ -134,3 +138,174 @@ class Binary:
                 file1.write("%s\n" % item[0])
             
             file1.close()
+
+class CAD():
+    def __init__(self, images_folder, destination_folder):
+        super().__init__()
+        self.images_folder=images_folder
+        self.destination_folder=destination_folder
+        self.contours_path="./contours/"
+        self.output_path="./processed/"
+
+        self.colorContourList=[]
+
+        isExist = os.path.exists(self.contours_path)
+        if not isExist:
+
+            # Create a new directory because it does not exist
+            os.makedirs(self.contours_path)
+            print("The new directory is created!")
+
+        isExist = os.path.exists(self.output_path)
+        if not isExist:
+
+            # Create a new directory because it does not exist
+            os.makedirs(self.output_path)
+            print("The new directory is created!")
+
+    """These functions help to separate 
+    contours based on HSV mapping of the image"""
+
+    def colorContour(self,upperBound, lowerBound,image,epsilon_coeff, threshold_Value,contour_name):
+        #Channel separation
+    
+        im = cv.imread(image,cv.IMREAD_UNCHANGED)
+
+
+        im2 =im.copy()
+        im22 = cv.cvtColor(im2,cv.COLOR_BGR2RGB )
+        
+        hsv = cv.cvtColor(im2, cv.COLOR_BGR2HSV)
+
+        # define range of blue color in HSV
+        lower_red = np.array(lowerBound)
+        upper_red = np.array(upperBound)
+        # Threshold the HSV image to get only blue colors
+        mask = cv.inRange(hsv,lower_red,upper_red)
+
+        # Apply threshold on s - use automatic threshold algorithm (use THRESH_OTSU).
+        _, thresh = cv.threshold(mask, threshold_Value, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+
+        # Find contours
+        red_cnts = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
+        red_cnts = imutils.grab_contours(red_cnts) 
+        #red_cnts= max(red_cnts, key=cv.contourArea) 
+        #Drawing
+        canvas = np.zeros_like(im22)
+        size = im.shape
+
+        #operating on every contour line
+        for contour in red_cnts:
+            
+            epsilon = epsilon_coeff*cv.arcLength(contour,True)
+            cnt_aprox = cv.approxPolyDP(contour,epsilon,True)
+        
+            cv.drawContours(canvas, cnt_aprox,-1,(0, 255, 0), 1)
+
+
+        cv.fillPoly(canvas, pts =red_cnts, color=(255,255,255))
+
+        cv.imwrite(self.contours_path+contour_name+".png", canvas, [cv.IMWRITE_PNG_COMPRESSION, 10]) 
+        
+        fig, ax = plt.subplots(1, 2, sharex='col', sharey='row',figsize=(5, 5))
+        ax[0].imshow(im22)
+        ax[1].imshow(canvas)
+        
+        return red_cnts,size
+
+    def DXF_build(self,multiplier, GoalSize,currentSize,red_cnts, border_cnts,green_cnts, selectedLayer):
+
+
+        
+        dwg = ezdxf.new()#"AC1015"
+        msp = dwg.modelspace()
+
+        dwg.layers.new(name="conductor", dxfattribs={"color": 1})
+        dwg.layers.new(name="dielectric", dxfattribs={"color": 8})
+        dwg.layers.new(name="substrate", dxfattribs={"color": 5})
+
+        """
+        Warning! This is the drwaing unit, not the HFSS original units.
+        To preserve the resolution everything needs to be rescaled and resized 
+        if image size is 512x512 it means 512 nm or 512 mm dpending on the units declared in dxf file
+        thus all drawing sizes must be scaled to fit.
+
+        working units together with multipliers must be chosen based on the need to keep ratio and size as we import from HFSS
+        """
+
+        scale=multiplier*GoalSize/currentSize
+
+        red_squeezed = [np.squeeze(cnt, axis=1) for cnt in red_cnts]
+        inverted_red_squeezed = [scale*arr * [1, -1] for arr in red_squeezed]#*0.1
+
+        green_squeezed = [np.squeeze(cnt, axis=1) for cnt in green_cnts]
+        inverted_green_squeezed = [scale*arr * [1, -1] for arr in green_squeezed]#*0.1
+
+        border_squeezed = [np.squeeze(cnt, axis=1) for cnt in border_cnts]
+        inverted_border_squeezed = [scale*arr * [1, -1] for arr in border_squeezed]#*0.1
+
+        """Select the layers to export"""
+        
+
+        for layer in selectedLayer:
+            if layer=="conductor":
+
+                for ctr in inverted_red_squeezed:
+                    line=msp.add_lwpolyline(
+                        ctr,
+                        format="xyb", close=True,
+                        dxfattribs={'layer': 'conductor'},
+                    )
+                    line.dxf.const_width = 0.5
+            elif layer=="dielectric":
+
+                for ctr in inverted_green_squeezed:
+                    line=msp.add_lwpolyline(
+                        ctr,
+                        format="xyb", close=True,
+                        dxfattribs={'layer': 'dielectric'},
+                    )
+                    line.dxf.const_width = 0.5
+            elif layer=="substrate":
+
+                for ctr in inverted_border_squeezed:
+                    line=msp.add_lwpolyline(
+                        ctr,
+                        format="xyb", close=True,
+                        dxfattribs={'layer': 'substrate'},
+                    )
+                    line.dxf.const_width = 0.5
+            else:
+                pass
+
+            
+            
+            """To draw the outline """
+
+        #for ctr in inverted_red_squeezed:
+        #    for n in range(len(ctr)):
+        #        if n >= len(ctr) - 1:
+        #            n = 0
+        #            
+        #        try:
+        #            msp.add_line(ctr[n], ctr[n + 1], dxfattribs={"layer": "red", "lineweight": 30})
+        #        except IndexError:
+        #            pass
+
+
+
+        dwg.saveas(self.output_path+"output.dxf")
+
+    def elevation_file(self,layers,**kwargs):
+        
+        units=kwargs["units"]
+        SIMID=kwargs["simulation_id"]
+
+        file = open(self.output_path+SIMID+'.tech', 'w')
+        file.write('units"'+ units+ '"\n')
+
+        for layer in layers:
+            
+            file.write(layer+" "+ layers[layer]["color"]+" "+ str(layers[layer]["zpos"]) +" "+ str(layers[layer]["thickness"]) +" "+'\n')
+
+        file.close()
