@@ -4,6 +4,8 @@ from ..setup import inputType
 import torch
 import pandas as pd
 from torch import nn
+import torchvision
+
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 
@@ -94,4 +96,20 @@ class ImageSet(Dataset):
         print(str(self.name))
 
     
+"""This custom data set enables de option of getting the filename in order to match
+data from other sources with the current image"""
+class CustomDataset(Dataset):
+    def __init__(self, root, transforms):
 
+        super(CustomDataset,self).__init__()
+        self.root = root
+        self.dataset =  torchvision.datasets.ImageFolder(root=self.root, transform=transforms)
+
+    def __getitem__(self, index):
+        data, target = self.dataset[index]
+        index = index
+        return data,target,os.path.basename(self.dataset.imgs[index][0])
+        
+
+    def __len__(self):
+        return len(self.dataset)

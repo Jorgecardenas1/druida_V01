@@ -12,7 +12,9 @@ import glob
 import ezdxf
 import imutils
 
+from ..DataManager import datamanager
 
+    
 
 def plot_images(images):
 
@@ -33,23 +35,40 @@ def save_images(images, path, **kwargs):
 
 
 """"Converting an image to tensor and normalizing"""
-def get_data(image_size, dataset_path,batch_size):
+def get_data(image_size,resize, dataset_path,batch_size):
+
     transforms = torchvision.transforms.Compose([
-        torchvision.transforms.Resize(80),  # args.image_size + 1/4 *args.image_size
-        torchvision.transforms.RandomResizedCrop(image_size, scale=(0.8, 1.0)),
+        torchvision.transforms.Resize(resize),  # args.image_size + 1/4 *args.image_size
+        torchvision.transforms.RandomResizedCrop(image_size, scale=(0.9, 0.9)),
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
     dataset = torchvision.datasets.ImageFolder(dataset_path, transform=transforms)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    #returns a data loader with normalized images
+
+    return dataloader, dataset.imgs
+
+""""Converting an image to tensor and normalizing"""
+def get_data_with_labels(image_size,resize, randomResize, dataset_path,batch_size, drop_last):
+
+    transforms = torchvision.transforms.Compose([
+        torchvision.transforms.Resize(resize),  # args.image_size + 1/4 *args.image_size
+        torchvision.transforms.RandomResizedCrop(image_size, scale=(randomResize, randomResize)),
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    ])
+
+    cursomDataset = datamanager.CustomDataset(dataset_path,transforms=transforms)
+    dataloader = DataLoader(cursomDataset, batch_size=batch_size, shuffle=True, drop_last=drop_last)
     #returns a data loader with normalized images
 
     return dataloader
 
-def get_data_denormalize(image_size, dataset_path,batch_size):
+def get_data_denormalize(image_size,resize, dataset_path,batch_size):
 
     transforms = torchvision.transforms.Compose([
-        torchvision.transforms.Resize(80),  # args.image_size + 1/4 *args.image_size
+        torchvision.transforms.Resize(resize),  # args.image_size + 1/4 *args.image_size
         torchvision.transforms.RandomResizedCrop(image_size, scale=(0.8, 1.0)),
         torchvision.transforms.ToTensor(),
 
