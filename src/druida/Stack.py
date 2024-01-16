@@ -12,15 +12,9 @@ sys.path.insert(0, '../druida_V01/src/')
 import os
 import copy
 
-import torch
-import torch.nn as nn
-
 from tqdm import tqdm
 from torch import optim
-#from utils import *
-
 import logging 
-import matplotlib.pyplot as plt
 
 
 from torch.utils.tensorboard import SummaryWriter
@@ -66,7 +60,7 @@ class Trainer:
         self.workers = args.workers
         self.gpu_number=args.gpu_number
 
-        self.checkDevice()
+        self.device=self.checkDevice()
         
     def training(self, trainFunction,testFunction, train_dataloader, test_dataloader, model, loss_fn, optimizer):
         acc=0
@@ -300,6 +294,7 @@ class Trainer:
 
 
 
+
 #Build a DNN stack 
     
 class DNN(nn.Module):
@@ -476,6 +471,104 @@ class Discriminator(nn.Module):
     
 
 #Build a Diffusion  model pipeline
+
+
+
+class Predictor_CNN(nn.Module):
+    def __init__(self, cond_input_size, ngpu=0, image_size=512 , output_size=0, channels=3,features_num=3000, dropout=0.2, Y_prediction_size=601):
+        super(Predictor_CNN, self).__init__()
+
+        
+        self.checkDevice()
+
+        self.ngpu = ngpu            
+        self.image_size = image_size
+        self.channels = channels
+        self.features_num = features_num
+        self.dropout=dropout
+
+
+        self.l1 = nn.Linear(cond_input_size, image_size*image_size*channels, bias=False)           
+        self.conv1 = nn.Conv2d(2*channels, output_size, 6, 2, 4, bias=False) 
+        self.conv2 = nn.LeakyReLU(0.2, inplace=True)
+        self.conv3 = nn.Conv2d(output_size, output_size * 2, 6, 2, 5, bias=False)
+        self.conv4 = nn.BatchNorm2d(output_size * 2)
+        self.conv5 = nn.LeakyReLU(0.2, inplace=True)
+        self.conv6 = nn.Conv2d(output_size * 2, output_size * 4, 6, 2, 4, bias=False)
+        self.conv7 = nn.BatchNorm2d(output_size * 4)
+        self.conv8 = nn.LeakyReLU(0.2, inplace=True)
+        self.conv9 = nn.Conv2d(output_size * 4, output_size * 8, 6, 2, 2, bias=False)
+        self.conv10 = nn.BatchNorm2d(output_size * 8)
+        self.conv11 = nn.LeakyReLU(0.2, inplace=True)
+        self.conv12 = nn.Conv2d(output_size * 8, output_size * 16, 2, 1, 0, bias=False)
+
+        
+        #Here we apply a flattening
+        self.l2 = nn.Linear(139392, features_num, bias=False)           
+          
+        self.dropout2 = nn.Dropout(dropout)
+        self.l4 = nn.Linear(features_num, Y_prediction_size, bias=False)           
+
+
+
+
+
+    def forward(self, input_, conditioning, b_size):
+        x1 = input_
+        x2 = self.l1(conditioning) #Size must be taken care = 800 in this case
+        #the output is imagesize x imagesize x channel
+        #hence the need of reshape 
+
+        if self.ngpu == 0 :
+        
+            x2 = x2.reshape(int(b_size),self.channels,self.image_size,self.image_size) 
+        else:
+            x2 = x2.reshape(int(b_size/self.ngpu),self.channels,self.image_size,self.image_size) 
+        
+
+        combine = torch.cat((x1,x2),dim=1) # concatenate in a given dimension
+     
+        outmap_min, _ = torch.min(combine, dim=1, keepdim=True)
+        outmap_max, _ = torch.max(combine, dim=1, keepdim=True)
+        combine = (combine - outmap_min) / (outmap_max - outmap_min) 
+
+        combine = self.conv1(combine) #This conv1 considers 2 x channels from the combine
+        combine = self.conv2(combine)
+        combine = self.conv3(combine)
+        combine = self.conv4(combine)
+        combine = self.conv5(combine)
+        
+        combine = self.conv6(combine)
+        combine = self.conv7(combine)
+        combine = self.conv8(combine)
+        combine = self.conv9(combine)
+        combine = self.conv10(combine)
+        combine = self.conv11(combine)
+        combine = self.conv12(combine)
+
+        combine =combine.view(combine.size(0), -1)
+
+        combine = self.l2(combine)
+        combine = self.dropout2(combine)
+
+        combine = self.l4(combine)
+
+        #a Final softmax
+        combine = F.softmax(combine, dim=1)
+
+
+        return combine
+
+    def checkDevice(self):
+        self.device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+        )
+    
+
 
 class Diffusion:
 
