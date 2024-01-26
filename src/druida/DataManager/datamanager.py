@@ -108,7 +108,11 @@ class CustomDataset(Dataset):
     def __getitem__(self, index):
         data, target = self.dataset[index]
         index = index
-        return data,target,os.path.basename(self.dataset.imgs[index][0])
+        name=self.dataset.imgs[index][0]
+        
+
+
+        return data,target,os.path.basename(self.dataset.imgs[index][0]),name.split('_')[0].split('\\')[-1]
         
 
     def __len__(self):
