@@ -754,6 +754,8 @@ class StableDiffusion(nn.Module):
 """Vision Transformer"""
 """PRE LN architecture"""
 
+"""PRE LN architecture"""
+
 class AttentionBlock(nn.Module):
     def __init__(self, embed_dim, hidden_dim, num_heads, dropout=0.0):
         """Attention Block.
@@ -780,12 +782,10 @@ class AttentionBlock(nn.Module):
 
     def forward(self, x):
         inp_x = self.layer_norm_1(x)
-        
         x = x + self.attn(inp_x, inp_x, inp_x)[0]
-        
         x = self.layer_norm_2(x)
 
-        x = x + self.linear(self.layer_norm_2(x))
+        x = x + self.linear(x)
         return x
     
 class VisionTransformer(nn.Module):
@@ -841,37 +841,7 @@ class VisionTransformer(nn.Module):
         
         self.pos_embedding = nn.Parameter(torch.randn(batch_size, 1 + num_patches, embed_dim))
 
-        
-        
-    def forward(self, x):
-        # Preprocess input
-        #x = img_to_patch(x, self.patch_size)
-        B, T, _, _ = x.shape
-        x = self.patches(x, patch_size=self.patch_size, flatten_channels=True)
-        x = self.input_layer(x)
-
-        # Add CLS token and positional encoding
-        cls_token = self.cls_token #.repeat(B, 1, 1)
-        #print("CLS Token  ",cls_token.shape)
-        x = torch.cat([cls_token, x], dim=1)
-
-        pos_embed=self.pos_embedding
-        #print("Positional Embedd ",pos_embed.shape)
-        
-        x = x + pos_embed
-        #print("x ", x.shape)
-        # Apply Transforrmer
-        #x = self.dropout(x)
-        #x = x.transpose(0, 1)
-        x = self.transformer(x)
-
-        
-            # Perform classification prediction
-        cls = x[0] ##Class token - supervision signal
-        out = self.mlp_head(cls)
-        return F.softmax(out,dim=1)
-    
-    def patches(self,x, patch_size, flatten_channels):
+    def patchify(self,x, patch_size, flatten_channels):
         """
         Args:
             x: Tensor representing the image of shape [B, C, H, W]
@@ -887,4 +857,34 @@ class VisionTransformer(nn.Module):
         if flatten_channels:
             x = x.flatten(2, 4)  # [B, H'*W', C*p_H*p_W]
             """Batches, number of patches per image, each flattened patch size including  channel"""
-        return x
+        return x  
+        
+    def forward(self, x):
+        # Preprocess input
+        #x = img_to_patch(x, self.patch_size)
+        B, T, _, _ = x.shape
+        x = self.patchify(x, patch_size=self.patch_size, flatten_channels=True)
+        x = self.input_layer(x)
+
+        # Add CLS token and positional encoding
+        cls_token = self.cls_token #.repeat(B, 1, 1)
+        #print("CLS Token  ",cls_token.shape)
+        x = torch.cat([cls_token, x], dim=1)
+
+        pos_embed=self.pos_embedding
+        #print("Positional Embedd ",pos_embed.shape)
+        
+        x = x + pos_embed
+        #print("x ", x.shape)
+        # Apply Transforrmer
+        x = self.dropout(x)
+        x = x.transpose(0, 1)
+        x = self.transformer(x)
+
+        
+            # Perform classification prediction
+        cls = x[0]
+        out = self.mlp_head(cls)
+        return F.softmax(out,dim=0)
+    
+    
