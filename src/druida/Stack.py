@@ -885,6 +885,6 @@ class VisionTransformer(nn.Module):
             # Perform classification prediction
         cls = x[0]
         out = self.mlp_head(cls)
-        return F.softmax(out,dim=0)
+        return out
     
     
