@@ -475,7 +475,7 @@ class Discriminator(nn.Module):
 
 
 class Predictor_CNN(nn.Module):
-    def __init__(self, cond_input_size, ngpu=0, image_size=512 , output_size=0, channels=3,features_num=3000, dropout=0.2, Y_prediction_size=601):
+    def __init__(self, cond_input_size, ngpu=0, image_size=512 , output_size=0, channels=3,features_num=1000, hiden_num=5000, dropout=0.2, Y_prediction_size=601):
         super(Predictor_CNN, self).__init__()
 
         
@@ -504,10 +504,17 @@ class Predictor_CNN(nn.Module):
 
         
         #Here we apply a flattening
-        self.l2 = nn.Linear(139392, features_num, bias=False)           
-          
+        #10368
+        #139392
+        if image_size==128:
+            self.l2 = nn.Linear(10368, hiden_num, bias=False)           
+
+        elif image_size==512:
+            self.l2 = nn.Linear(139392, hiden_num, bias=False)           
+        
+        #self.l3 = nn.Linear(hiden_num, features_num, bias=False)           
         self.dropout2 = nn.Dropout(dropout)
-        self.l4 = nn.Linear(features_num, Y_prediction_size, bias=False)           
+        self.l4 = nn.Linear(hiden_num, Y_prediction_size, bias=False)           
 
 
 
@@ -518,13 +525,14 @@ class Predictor_CNN(nn.Module):
         x2 = self.l1(conditioning) #Size must be taken care = 800 in this case
         #the output is imagesize x imagesize x channel
         #hence the need of reshape 
-
+        #print(x2.shape)
         if self.ngpu == 0 :
         
             x2 = x2.reshape(int(b_size),self.channels,self.image_size,self.image_size) 
         else:
             x2 = x2.reshape(int(b_size/self.ngpu),self.channels,self.image_size,self.image_size) 
         
+        #print(x2.shape)
 
         combine = torch.cat((x1,x2),dim=1) # concatenate in a given dimension
      
@@ -547,8 +555,10 @@ class Predictor_CNN(nn.Module):
         combine = self.conv12(combine)
 
         combine =combine.view(combine.size(0), -1)
-
+        #print(combine.shape)
         combine = self.l2(combine)
+        #combine = self.l3(combine)
+
         combine = self.dropout2(combine)
 
         combine = self.l4(combine)
@@ -812,34 +822,77 @@ class VisionTransformer(nn.Module):
         super().__init__()
         
         
-        batch_size=kwargs["batch_size"]
+        self.batch_size=kwargs["batch_size"]
         embed_dim=kwargs["embed_dim"]
         hidden_dim=kwargs["hidden_dim"]
-        num_channels=kwargs["num_channels"]
+        self.num_channels=kwargs["num_channels"]
         num_heads=kwargs["num_heads"]
         num_layers=kwargs["num_layers"]
         num_classes=kwargs["num_classes"]
         patch_size=kwargs["patch_size"]
         num_patches=kwargs["num_patches"]
         dropout=kwargs["dropout"]
+        self.image_size=kwargs["image_size"]
 
         self.patch_size = patch_size
+        self.ngpu=0
 
-        # Layers/Networks
-        self.input_layer = nn.Linear(num_channels * (patch_size**2), embed_dim)
-        self.transformer = nn.Sequential(
-            *(AttentionBlock(embed_dim, hidden_dim, num_heads, dropout=dropout) for _ in range(num_layers))
-        )
-        self.mlp_head = nn.Sequential(nn.LayerNorm(embed_dim), nn.Linear(embed_dim, num_classes))
-        self.dropout = nn.Dropout(dropout)
+        if kwargs['conditionalIn'] == True :
 
-        # Parameters/Embeddings
-        #self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim))
-        
-        self.cls_token = nn.Parameter(torch.randn(batch_size, 1, num_channels * patch_size**2))
-        
-        
-        self.pos_embedding = nn.Parameter(torch.randn(batch_size, 1 + num_patches, embed_dim))
+            print('conditioned')
+            self.conditionalIn=kwargs["conditionalIn"]
+            self.conditionalLen=kwargs["conditionalLen"]
+
+            self.l1 = nn.Linear(self.conditionalLen, self.image_size*self.image_size*self.num_channels, bias=False)           
+
+
+            # Layers/Networks
+            
+            self.input_layer = nn.Linear(2*self.num_channels * (patch_size**2), 2*embed_dim)
+            self.transformer = nn.Sequential(
+                *(AttentionBlock(2*embed_dim, hidden_dim, num_heads, dropout=dropout) for _ in range(num_layers))
+            )
+            self.mlp_head = nn.Sequential(nn.LayerNorm(2*embed_dim), nn.Linear(2*embed_dim, num_classes))
+            self.dropout = nn.Dropout(dropout)
+
+            # Parameters/Embeddings
+            #self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim))
+            
+            self.cls_token = nn.Parameter(torch.randn(self.batch_size, 1, 2*self.num_channels * (patch_size)**2))
+            
+            
+            self.pos_embedding = nn.Parameter(torch.randn(self.batch_size, 1 + num_patches, 2*embed_dim))
+
+
+
+        else:
+            # Layers/Networks
+            
+            self.input_layer = nn.Linear(self.num_channels * (patch_size**2), embed_dim)
+            self.transformer = nn.Sequential(
+                *(AttentionBlock(embed_dim, hidden_dim, num_heads, dropout=dropout) for _ in range(num_layers))
+            )
+            self.mlp_head = nn.Sequential(nn.LayerNorm(embed_dim), nn.Linear(embed_dim, num_classes))
+            self.dropout = nn.Dropout(dropout)
+
+            # Parameters/Embeddings
+            #self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim))
+            
+            self.cls_token = nn.Parameter(torch.randn(self.batch_size, 1, self.num_channels * patch_size**2))
+            
+            
+            self.pos_embedding = nn.Parameter(torch.randn(self.batch_size, 1 + num_patches, embed_dim))
+
+        #self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            nn.init.trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
 
     def patchify(self,x, patch_size, flatten_channels):
         """
@@ -859,16 +912,37 @@ class VisionTransformer(nn.Module):
             """Batches, number of patches per image, each flattened patch size including  channel"""
         return x  
         
-    def forward(self, x):
+    def forward(self, x, condition=None):
         # Preprocess input
         #x = img_to_patch(x, self.patch_size)
+        if condition !=None:
+ 
+            x2 = self.l1(condition) 
+
+            if self.ngpu == 0 :
+            
+                x2 = x2.reshape(int(self.batch_size),self.num_channels,self.image_size,self.image_size) 
+            else:
+                x2 = x2.reshape(int(self.batch_size/self.ngpu),self.num_channels,self.image_size,self.image_size) 
+            
+ 
+            combine = torch.cat((x,x2),dim=1) # concatenate in a given dimension
+            
+ 
+            outmap_min, _ = torch.min(combine, dim=1, keepdim=True)
+            outmap_max, _ = torch.max(combine, dim=1, keepdim=True)
+            x = (combine - outmap_min) / (outmap_max - outmap_min) 
+    
         B, T, _, _ = x.shape
+
+
         x = self.patchify(x, patch_size=self.patch_size, flatten_channels=True)
         x = self.input_layer(x)
 
         # Add CLS token and positional encoding
         cls_token = self.cls_token #.repeat(B, 1, 1)
         #print("CLS Token  ",cls_token.shape)
+
         x = torch.cat([cls_token, x], dim=1)
 
         pos_embed=self.pos_embedding
@@ -885,6 +959,7 @@ class VisionTransformer(nn.Module):
             # Perform classification prediction
         cls = x[0]
         out = self.mlp_head(cls)
+
         return out
     
     
