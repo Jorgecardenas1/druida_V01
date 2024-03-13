@@ -109,10 +109,15 @@ class CustomDataset(Dataset):
         data, target = self.dataset[index]
         index = index
         name=self.dataset.imgs[index][0]
-        
+        class_name=""
+        if "\\" in name:
+            class_name=name.split('_')[0].split('\\')
+
+        else:
+            class_name=name.split('_')[0].split('/')
 
 
-        return data,target,os.path.basename(self.dataset.imgs[index][0]),name.split('_')[0].split('\\')[-1]
+        return data,target,os.path.basename(self.dataset.imgs[index][0]),class_name[-1]
         
 
     def __len__(self):

@@ -53,7 +53,7 @@ def get_data(image_size,resize, dataset_path,batch_size):
 def get_data_with_labels(image_size,resize, randomResize, dataset_path,batch_size, drop_last):
 
     transforms = torchvision.transforms.Compose([
-        torchvision.transforms.Resize(resize),  # args.image_size + 1/4 *args.image_size
+        #torchvision.transforms.Resize(resize),  # args.image_size + 1/4 *args.image_size
         torchvision.transforms.RandomResizedCrop(image_size, scale=(randomResize, randomResize)),
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
