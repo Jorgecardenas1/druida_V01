@@ -7,6 +7,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torchvision.models import resnet50, ResNet50_Weights
+
 sys.path.insert(0, '../druida_V01/src/')
 
 import os
@@ -517,9 +519,6 @@ class Predictor_CNN(nn.Module):
         self.l4 = nn.Linear(hiden_num, Y_prediction_size, bias=False)           
 
 
-
-
-
     def forward(self, input_, conditioning, b_size):
         x1 = input_
         x2 = self.l1(conditioning) #Size must be taken care = 800 in this case
@@ -554,6 +553,8 @@ class Predictor_CNN(nn.Module):
         combine = self.conv11(combine)
         combine = self.conv12(combine)
 
+        """Change between conv to linear layers"""
+
         combine =combine.view(combine.size(0), -1)
         #print(combine.shape)
         combine = self.l2(combine)
@@ -567,6 +568,90 @@ class Predictor_CNN(nn.Module):
         combine = F.softmax(combine, dim=1)
 
 
+        return combine
+
+    def checkDevice(self):
+        self.device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+        )
+    
+
+class Predictor_RESNET(nn.Module):
+    def __init__(self, cond_input_size, ngpu=0, image_size=512 , output_size=0, channels=3,features_num=1000, hiden_num=5000, dropout=0.2, Y_prediction_size=601):
+        super(Predictor_CNN, self).__init__()
+
+        
+        self.checkDevice()
+
+        self.ngpu = ngpu            
+        self.image_size = image_size
+        self.channels = channels
+        self.features_num = features_num
+        self.dropout=dropout
+
+
+        weights = ResNet50_Weights.DEFAULT
+        self.model = resnet50(weights=weights)
+        torch.nn.init.xavier_uniform_(self.model.fc.weight)
+        conditional=True
+        
+        if conditional==True:
+            self.model.conv1.in_channels=6
+        else:
+            self.model.conv1.in_channels=3
+        # Substitute the FC output layer
+        self.linear = nn.Sequential(
+                nn.Dropout(dropout),
+                nn.Linear(self.model.fc.in_features, features_num, bias=False),
+                nn.Linear(features_num, hiden_num, bias=False),
+                nn.Dropout(dropout),
+                nn.Linear(hiden_num, output_size, bias=False)           
+            )
+        if image_size==128:
+            self.l2 = nn.Linear(self.model.fc.in_features, features_num, bias=False)           
+
+        elif image_size==512:
+            self.l2 = nn.Linear(self.model.fc.in_features, features_num, bias=False)           
+        
+        self.l3 = nn.Linear(features_num, hiden_num, bias=False)           
+        self.dropout2 = nn.Dropout(dropout)
+        self.l4 = nn.Linear(hiden_num, Y_prediction_size, bias=False)           
+
+
+    def forward(self, input_, conditioning, b_size, RESNET):
+        x1 = input_
+        x2 = self.l1(conditioning) #Size must be taken care = 800 in this case
+        #the output is imagesize x imagesize x channel
+        #hence the need of reshape 
+        #print(x2.shape)
+        if self.ngpu == 0 :
+        
+            x2 = x2.reshape(int(b_size),self.channels,self.image_size,self.image_size) 
+        else:
+            x2 = x2.reshape(int(b_size/self.ngpu),self.channels,self.image_size,self.image_size) 
+        
+        #print(x2.shape)
+
+        combine = torch.cat((x1,x2),dim=1) # concatenate in a given dimension
+     
+        outmap_min, _ = torch.min(combine, dim=1, keepdim=True)
+        outmap_max, _ = torch.max(combine, dim=1, keepdim=True)
+        combine = (combine - outmap_min) / (outmap_max - outmap_min) 
+
+        combine = self.model(combine) #This conv1 considers 2 x channels from the combine
+        
+        """Change between conv to linear layers"""
+
+        combine = self.l2(combine)
+        combine = self.l3(combine)
+        combine = self.dropout2(combine)
+        combine = self.l4(combine)
+
+        
         return combine
 
     def checkDevice(self):
