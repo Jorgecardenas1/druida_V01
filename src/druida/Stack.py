@@ -582,7 +582,7 @@ class Predictor_CNN(nn.Module):
 
 class Predictor_RESNET(nn.Module):
     def __init__(self, cond_input_size, ngpu=0, image_size=512 , output_size=0, channels=3,features_num=1000, hiden_num=5000, dropout=0.2, Y_prediction_size=601):
-        super(Predictor_CNN, self).__init__()
+        super(Predictor_RESNET, self).__init__()
 
         
         self.checkDevice()
@@ -593,36 +593,46 @@ class Predictor_RESNET(nn.Module):
         self.features_num = features_num
         self.dropout=dropout
 
+        self.l1 = nn.Linear(cond_input_size, image_size*image_size*channels, bias=False)           
+
 
         weights = ResNet50_Weights.DEFAULT
         self.model = resnet50(weights=weights)
-        torch.nn.init.xavier_uniform_(self.model.fc.weight)
+
         conditional=True
-        
+        num_filters = self.model.conv1.out_channels   
+        kernel_size = self.model.conv1.kernel_size
+        stride = self.model.conv1.stride
+        padding = self.model.conv1.padding
+
         if conditional==True:
-            self.model.conv1.in_channels=6
+            conv1 = torch.nn.Conv2d(6, num_filters, kernel_size=kernel_size, stride=stride, padding=padding)
+            # Initialize the new conv1 layer's weights by averaging the pretrained weights across the channel dimension
+            original_weights = self.model.conv1.weight.data.mean(dim=1, keepdim=True)
+            # Expand the averaged weights to the number of input channels of the new dataset
+            conv1.weight.data = original_weights.repeat(1, 6, 1, 1)
         else:
-            self.model.conv1.in_channels=3
-        # Substitute the FC output layer
+            conv1 = torch.nn.Conv2d(3, num_filters, kernel_size=kernel_size, stride=stride, padding=padding)
+            # Initialize the new conv1 layer's weights by averaging the pretrained weights across the channel dimension
+            original_weights = self.model.conv1.weight.data.mean(dim=1, keepdim=True)
+            # Expand the averaged weights to the number of input channels of the new dataset
+            conv1.weight.data = original_weights.repeat(1, 3, 1, 1)        # Substitute the FC output layer
+
+        self.model.conv1 = conv1
+
         self.linear = nn.Sequential(
-                nn.Dropout(dropout),
                 nn.Linear(self.model.fc.in_features, features_num, bias=False),
                 nn.Linear(features_num, hiden_num, bias=False),
                 nn.Dropout(dropout),
-                nn.Linear(hiden_num, output_size, bias=False)           
+                nn.Linear(hiden_num, Y_prediction_size, bias=False)           
             )
-        if image_size==128:
-            self.l2 = nn.Linear(self.model.fc.in_features, features_num, bias=False)           
-
-        elif image_size==512:
-            self.l2 = nn.Linear(self.model.fc.in_features, features_num, bias=False)           
         
-        self.l3 = nn.Linear(features_num, hiden_num, bias=False)           
-        self.dropout2 = nn.Dropout(dropout)
-        self.l4 = nn.Linear(hiden_num, Y_prediction_size, bias=False)           
+        self.model.fc =self.linear
+        
+        #torch.nn.init.xavier_uniform_(self.model.fc.weight)
 
 
-    def forward(self, input_, conditioning, b_size, RESNET):
+    def forward(self, input_, conditioning, b_size):
         x1 = input_
         x2 = self.l1(conditioning) #Size must be taken care = 800 in this case
         #the output is imagesize x imagesize x channel
@@ -646,10 +656,6 @@ class Predictor_RESNET(nn.Module):
         
         """Change between conv to linear layers"""
 
-        combine = self.l2(combine)
-        combine = self.l3(combine)
-        combine = self.dropout2(combine)
-        combine = self.l4(combine)
 
         
         return combine
