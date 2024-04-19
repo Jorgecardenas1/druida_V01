@@ -621,6 +621,7 @@ class Predictor_RESNET(nn.Module):
         self.model.conv1 = conv1
 
         self.linear = nn.Sequential(
+                nn.Linear(self.model.fc.in_features, self.model.fc.in_features, bias=False),
                 nn.Linear(self.model.fc.in_features, features_num, bias=False),
                 nn.Linear(features_num, hiden_num, bias=False),
                 nn.Dropout(dropout),
@@ -656,8 +657,6 @@ class Predictor_RESNET(nn.Module):
         
         """Change between conv to linear layers"""
 
-
-        
         return combine
 
     def checkDevice(self):
