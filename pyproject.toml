@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 [project]
 name = "druida"
-version = "0.0.34"
+version = "0.0.51"
 authors = [
   { name="Jorge Cardenas", email="jorge.cardenas.l@mail.pucv.cl" },
 ]
@@ -22,9 +22,9 @@ dependencies = [
   "numpy<=1.24.3",
   "pandas~=2.1.0", 
   "tensorflow",
-  "torch==2.0.1",
+  "torch",
   "scikit-learn",
-  "torchvision==0.17.2",
+  "torchvision",
   "torchsummary",
   "matplotlib",
   "tqdm",

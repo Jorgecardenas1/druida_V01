@@ -88,6 +88,30 @@ class ImageSet(Dataset):
         if self.target_transform:
             label = self.target_transform(label)
         return image, label
+    
+        # if self.filter is not None:
+
+        #     if self.filter in name:
+                
+        #         if "\\" in name:
+        #             class_name=name.split('_')[0].split('\\')
+
+        #         else:
+        #             class_name=name.split('_')[0].split('/')
+
+        #         return data,target,os.path.basename(self.dataset.imgs[index][0]),class_name[-1]
+            
+        # else:
+
+        #     if "\\" in name:
+        #         class_name=name.split('_')[0].split('\\')
+
+        #     else:
+        #         class_name=name.split('_')[0].split('/')
+        #    return data,target,os.path.basename(self.dataset.imgs[index][0]),class_name[-1]
+
+
+        
 
     def load(self):
         pass
@@ -99,25 +123,32 @@ class ImageSet(Dataset):
 """This custom data set enables de option of getting the filename in order to match
 data from other sources with the current image"""
 class CustomDataset(Dataset):
-    def __init__(self, root, transforms):
+    def __init__(self, root, transforms,filter):
 
         super(CustomDataset,self).__init__()
         self.root = root
         self.dataset =  torchvision.datasets.ImageFolder(root=self.root, transform=transforms)
-
+        self.filter=filter
     def __getitem__(self, index):
+       
+        
+        
         data, target = self.dataset[index]
         index = index
         name=self.dataset.imgs[index][0]
         class_name=""
+
+
         if "\\" in name:
             class_name=name.split('_')[0].split('\\')
 
         else:
             class_name=name.split('_')[0].split('/')
 
-
         return data,target,os.path.basename(self.dataset.imgs[index][0]),class_name[-1]
+            
+
+
         
 
     def __len__(self):

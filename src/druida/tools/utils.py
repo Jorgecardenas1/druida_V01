@@ -50,7 +50,7 @@ def get_data(image_size,resize, dataset_path,batch_size):
     return dataloader, dataset.imgs
 
 """"Converting an image to tensor and normalizing"""
-def get_data_with_labels(image_size,resize, randomResize, dataset_path,batch_size, drop_last):
+def get_data_with_labels(image_size,resize, randomResize, dataset_path,batch_size, drop_last,filter):
 
     transforms = torchvision.transforms.Compose([
         #torchvision.transforms.Resize(resize),  # args.image_size + 1/4 *args.image_size
@@ -59,8 +59,15 @@ def get_data_with_labels(image_size,resize, randomResize, dataset_path,batch_siz
         torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
 
-    cursomDataset = datamanager.CustomDataset(dataset_path,transforms=transforms)
+    cursomDataset = datamanager.CustomDataset(dataset_path,transforms,filter)
+
+    # if not (filter is None):
+
+    #     trainset_1 = torch.utils.data.Subset(cursomDataset, self.filter)
+    #     dataloader = DataLoader(trainset_1,  batch_size=batch_size, shuffle=True, drop_last=drop_last)
+    # else:
     dataloader = DataLoader(cursomDataset, batch_size=batch_size, shuffle=True, drop_last=drop_last)
+
     #returns a data loader with normalized images
 
     return dataloader

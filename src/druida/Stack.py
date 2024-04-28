@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torchvision.models import resnet50, ResNet50_Weights
+import torchvision
 
 sys.path.insert(0, '../druida_V01/src/')
 
@@ -581,7 +582,7 @@ class Predictor_CNN(nn.Module):
     
 
 class Predictor_RESNET(nn.Module):
-    def __init__(self, cond_input_size, ngpu=0, image_size=512 , output_size=0, channels=3,features_num=1000, hiden_num=5000, dropout=0.2, Y_prediction_size=601):
+    def __init__(self,conditional, cond_input_size,cond_channels, ngpu=0, image_size=512 , output_size=0, channels=3,features_num=1000, hiden_num=5000, dropout=0.2, Y_prediction_size=601):
         super(Predictor_RESNET, self).__init__()
 
         
@@ -592,31 +593,31 @@ class Predictor_RESNET(nn.Module):
         self.channels = channels
         self.features_num = features_num
         self.dropout=dropout
+        self.cond_channels=cond_channels
 
-        self.l1 = nn.Linear(cond_input_size, image_size*image_size*channels, bias=False)           
+        self.l1 = nn.Linear(cond_input_size, image_size*image_size*cond_channels, bias=False)           
 
+        #weights = ResNet50_Weights.DEFAULT
+        self.model = resnet50(pretrained=False)
 
-        weights = ResNet50_Weights.DEFAULT
-        self.model = resnet50(weights=weights)
-
-        conditional=True
+        self.conditional=conditional
         num_filters = self.model.conv1.out_channels   
         kernel_size = self.model.conv1.kernel_size
         stride = self.model.conv1.stride
         padding = self.model.conv1.padding
 
-        if conditional==True:
-            conv1 = torch.nn.Conv2d(6, num_filters, kernel_size=kernel_size, stride=stride, padding=padding)
+        if self.conditional==True:
+            conv1 = torch.nn.Conv2d(self.cond_channels+self.channels, num_filters, kernel_size=kernel_size, stride=stride, padding=padding)
             # Initialize the new conv1 layer's weights by averaging the pretrained weights across the channel dimension
-            original_weights = self.model.conv1.weight.data.mean(dim=1, keepdim=True)
+            #original_weights = self.model.conv1.weight.data.mean(dim=1, keepdim=True)
             # Expand the averaged weights to the number of input channels of the new dataset
-            conv1.weight.data = original_weights.repeat(1, 6, 1, 1)
+            #conv1.weight.data = original_weights.repeat(1, 6, 1, 1)
         else:
-            conv1 = torch.nn.Conv2d(3, num_filters, kernel_size=kernel_size, stride=stride, padding=padding)
+            conv1 = torch.nn.Conv2d(self.channels, num_filters, kernel_size=kernel_size, stride=stride, padding=padding)
             # Initialize the new conv1 layer's weights by averaging the pretrained weights across the channel dimension
-            original_weights = self.model.conv1.weight.data.mean(dim=1, keepdim=True)
+            #original_weights = self.model.conv1.weight.data.mean(dim=1, keepdim=True)
             # Expand the averaged weights to the number of input channels of the new dataset
-            conv1.weight.data = original_weights.repeat(1, 3, 1, 1)        # Substitute the FC output layer
+            #conv1.weight.data = original_weights.repeat(1, 3, 1, 1)        # Substitute the FC output layer
 
         self.model.conv1 = conv1
 
@@ -635,29 +636,37 @@ class Predictor_RESNET(nn.Module):
 
     def forward(self, input_, conditioning, b_size):
         x1 = input_
-        x2 = self.l1(conditioning) #Size must be taken care = 800 in this case
         #the output is imagesize x imagesize x channel
         #hence the need of reshape 
         #print(x2.shape)
-        if self.ngpu == 0 :
+        #We can tray as many channels as prefered. In this case I will try 1 channel
+        num_channel=self.cond_channels
+
+        if self.conditional:
+            
+            x2 = self.l1(conditioning) #Size must be taken care = 800 in this case
+
+            if self.ngpu == 0 :
+            
+                x2 = x2.reshape(int(b_size),num_channel,self.image_size,self.image_size) 
+                
+            else:
+                x2 = x2.reshape(int(b_size/self.ngpu),num_channel,self.image_size,self.image_size)
+
+            x2 = torchvision.transforms.Normalize([0.6, ], [0.3, ],[0.8,])(x2)
+
+            combine = torch.cat((x1,x2),dim=1) # concatenate in a given dimension
         
-            x2 = x2.reshape(int(b_size),self.channels,self.image_size,self.image_size) 
+            outmap_min, _ = torch.min(combine, dim=1, keepdim=True)
+            outmap_max, _ = torch.max(combine, dim=1, keepdim=True)
+            combine = (combine - outmap_min) / (outmap_max - outmap_min) 
+
+            combine = self.model(combine) #This conv1 considers 2 x channels from the combine
+        
+            """Change between conv to linear layers"""
+            return combine
         else:
-            x2 = x2.reshape(int(b_size/self.ngpu),self.channels,self.image_size,self.image_size) 
-        
-        #print(x2.shape)
-
-        combine = torch.cat((x1,x2),dim=1) # concatenate in a given dimension
-     
-        outmap_min, _ = torch.min(combine, dim=1, keepdim=True)
-        outmap_max, _ = torch.max(combine, dim=1, keepdim=True)
-        combine = (combine - outmap_min) / (outmap_max - outmap_min) 
-
-        combine = self.model(combine) #This conv1 considers 2 x channels from the combine
-        
-        """Change between conv to linear layers"""
-
-        return combine
+            return self.model(x1)
 
     def checkDevice(self):
         self.device = (
@@ -962,7 +971,7 @@ class VisionTransformer(nn.Module):
             self.transformer = nn.Sequential(
                 *(AttentionBlock(embed_dim, hidden_dim, num_heads, dropout=dropout) for _ in range(num_layers))
             )
-            self.mlp_head = nn.Sequential(nn.LayerNorm(embed_dim), nn.Linear(embed_dim, num_classes))
+            self.mlp_head = nn.Sequential(nn.LayerNorm(embed_dim),nn.Linear(embed_dim, embed_dim), nn.Linear(embed_dim, num_classes))
             self.dropout = nn.Dropout(dropout)
 
             # Parameters/Embeddings
@@ -973,7 +982,7 @@ class VisionTransformer(nn.Module):
             
             self.pos_embedding = nn.Parameter(torch.randn(self.batch_size, 1 + num_patches, embed_dim))
 
-        #self.apply(self._init_weights)
+        #self.apply(self._init_weights) 
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
