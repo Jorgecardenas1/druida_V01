@@ -948,7 +948,7 @@ class VisionTransformer(nn.Module):
 
             # Layers/Networks
             
-            self.input_layer = nn.Linear(self.cond_num_channels+self.num_channels * (patch_size**2), 2*embed_dim)
+            self.input_layer = nn.Linear((self.cond_num_channels+self.num_channels) * (patch_size**2), 2*embed_dim)
             self.transformer = nn.Sequential(
                 *(AttentionBlock(2*embed_dim, hidden_dim, num_heads, dropout=dropout) for _ in range(num_layers))
             )
@@ -1025,7 +1025,8 @@ class VisionTransformer(nn.Module):
             else:
                 x2 = x2.reshape(int(self.batch_size/self.ngpu),self.cond_num_channels,self.image_size,self.image_size) 
             
- 
+            x2 = torchvision.transforms.Normalize([0.25, ], [.1, ],[0.3,])(x2)
+
             combine = torch.cat((x,x2),dim=1) # concatenate in a given dimension
             
  
