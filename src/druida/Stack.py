@@ -925,6 +925,7 @@ class VisionTransformer(nn.Module):
         embed_dim=kwargs["embed_dim"]
         hidden_dim=kwargs["hidden_dim"]
         self.num_channels=kwargs["num_channels"]
+        self.cond_num_channels=kwargs["con_num_channels"]
         num_heads=kwargs["num_heads"]
         num_layers=kwargs["num_layers"]
         num_classes=kwargs["num_classes"]
@@ -942,12 +943,12 @@ class VisionTransformer(nn.Module):
             self.conditionalIn=kwargs["conditionalIn"]
             self.conditionalLen=kwargs["conditionalLen"]
 
-            self.l1 = nn.Linear(self.conditionalLen, self.image_size*self.image_size*self.num_channels, bias=False)           
+            self.l1 = nn.Linear(self.conditionalLen, self.image_size*self.image_size*self.cond_num_channels, bias=False)           
 
 
             # Layers/Networks
             
-            self.input_layer = nn.Linear(2*self.num_channels * (patch_size**2), 2*embed_dim)
+            self.input_layer = nn.Linear(self.cond_num_channels+self.num_channels * (patch_size**2), 2*embed_dim)
             self.transformer = nn.Sequential(
                 *(AttentionBlock(2*embed_dim, hidden_dim, num_heads, dropout=dropout) for _ in range(num_layers))
             )
@@ -957,7 +958,7 @@ class VisionTransformer(nn.Module):
             # Parameters/Embeddings
             #self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim))
             
-            self.cls_token = nn.Parameter(torch.randn(self.batch_size, 1, 2*self.num_channels * (patch_size)**2))
+            self.cls_token = nn.Parameter(torch.randn(self.batch_size, 1, (self.cond_num_channels+self.num_channels) * (patch_size)**2))
             
             
             self.pos_embedding = nn.Parameter(torch.randn(self.batch_size, 1 + num_patches, 2*embed_dim))
@@ -1020,9 +1021,9 @@ class VisionTransformer(nn.Module):
 
             if self.ngpu == 0 :
             
-                x2 = x2.reshape(int(self.batch_size),self.num_channels,self.image_size,self.image_size) 
+                x2 = x2.reshape(int(self.batch_size),self.cond_num_channels,self.image_size,self.image_size) 
             else:
-                x2 = x2.reshape(int(self.batch_size/self.ngpu),self.num_channels,self.image_size,self.image_size) 
+                x2 = x2.reshape(int(self.batch_size/self.ngpu),self.cond_num_channels,self.image_size,self.image_size) 
             
  
             combine = torch.cat((x,x2),dim=1) # concatenate in a given dimension
