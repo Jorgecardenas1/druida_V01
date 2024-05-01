@@ -406,7 +406,7 @@ class Generator(nn.Module):
 #Build a Discriminator for GAN stack 
 
 class Discriminator(nn.Module):
-    def __init__(self, ngpu=0, image_size=32, discriminator_mapping_size=0, channels=3):
+    def __init__(self,label_length, ngpu=0, image_size=32, discriminator_mapping_size=0, channels=3):
         super(Discriminator, self).__init__()
 
         
@@ -416,8 +416,10 @@ class Discriminator(nn.Module):
         self.image_size = image_size
         self.channels = channels
 
+        # Habitualmente en el primer ejerciio 
+        # label_length era 800
 
-        self.l1 = nn.Linear(800, image_size*image_size*channels, bias=False)           
+        self.l1 = nn.Linear(label_length, image_size*image_size*channels, bias=False)            
         self.conv1 = nn.Conv2d(2*channels, discriminator_mapping_size, 6, 2, 4, bias=False) 
         self.conv2 = nn.LeakyReLU(0.2, inplace=True)
         self.conv3 = nn.Conv2d(discriminator_mapping_size, discriminator_mapping_size * 2, 6, 2, 5, bias=False)
@@ -645,6 +647,8 @@ class Predictor_RESNET(nn.Module):
         if self.conditional:
             
             x2 = self.l1(conditioning) #Size must be taken care = 800 in this case
+            m = nn.Tanh()
+            x2 = m(x2)
 
             if self.ngpu == 0 :
             
@@ -653,7 +657,11 @@ class Predictor_RESNET(nn.Module):
             else:
                 x2 = x2.reshape(int(b_size/self.ngpu),num_channel,self.image_size,self.image_size)
 
-            x2 = torchvision.transforms.Normalize([0.6, ], [0.3, ],[0.8,])(x2)
+            # if self.cond_channels==3:
+            #     x2 = torchvision.transforms.Normalize([0.6, ], [0.3, ],[0.8,])(x2)
+            # else:
+            #     x2 = torchvision.transforms.Normalize([0.2, ], [0.1, ],[0.3,])(x2)
+
 
             combine = torch.cat((x1,x2),dim=1) # concatenate in a given dimension
         
@@ -1025,7 +1033,7 @@ class VisionTransformer(nn.Module):
             else:
                 x2 = x2.reshape(int(self.batch_size/self.ngpu),self.cond_num_channels,self.image_size,self.image_size) 
             
-            x2 = torchvision.transforms.Normalize([0.25, ], [.1, ],[0.3,])(x2)
+            x2 = torchvision.transforms.Normalize([0.15, ], [.1, ],[0.4,])(x2)
 
             combine = torch.cat((x,x2),dim=1) # concatenate in a given dimension
             
@@ -1057,7 +1065,7 @@ class VisionTransformer(nn.Module):
         x = self.transformer(x)
 
         
-            # Perform classification prediction
+        # Perform classification prediction
         cls = x[0]
         out = self.mlp_head(cls)
 
