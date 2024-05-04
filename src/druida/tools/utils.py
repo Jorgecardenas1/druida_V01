@@ -171,7 +171,7 @@ class CAD():
         self.images_folder=images_folder
         self.destination_folder=destination_folder
         self.contours_path="./contours/"
-        self.output_path="./processed/"
+        self.output_path=destination_folder
 
         self.colorContourList=[]
 
