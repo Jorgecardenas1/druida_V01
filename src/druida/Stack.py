@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models import resnet50, ResNet50_Weights, resnet152
 import torchvision
 
 sys.path.insert(0, '../druida_V01/src/')
@@ -584,7 +584,7 @@ class Predictor_CNN(nn.Module):
     
 
 class Predictor_RESNET(nn.Module):
-    def __init__(self,conditional, cond_input_size,cond_channels, ngpu=0, image_size=512 , output_size=0, channels=3,features_num=1000, hiden_num=5000, dropout=0.2, Y_prediction_size=601):
+    def __init__(self,resnet_arch,conditional, cond_input_size,cond_channels, ngpu=0, image_size=512 , output_size=0, channels=3,features_num=1000, hiden_num=5000, dropout=0.2, Y_prediction_size=601):
         super(Predictor_RESNET, self).__init__()
 
         
@@ -600,7 +600,12 @@ class Predictor_RESNET(nn.Module):
         self.l1 = nn.Linear(cond_input_size, image_size*image_size*cond_channels, bias=False)           
 
         #weights = ResNet50_Weights.DEFAULT
-        self.model = resnet50(pretrained=False)
+        if resnet_arch=="resnet50":
+            self.model = resnet50(pretrained=False)
+        else:
+            self.model = resnet152(pretrained=False)
+
+
 
         self.conditional=conditional
         num_filters = self.model.conv1.out_channels   
@@ -941,6 +946,7 @@ class VisionTransformer(nn.Module):
         num_patches=kwargs["num_patches"]
         dropout=kwargs["dropout"]
         self.image_size=kwargs["image_size"]
+        self.regression=kwargs["regression"]
 
         self.patch_size = patch_size
         self.ngpu=0
@@ -960,7 +966,20 @@ class VisionTransformer(nn.Module):
             self.transformer = nn.Sequential(
                 *(AttentionBlock(2*embed_dim, hidden_dim, num_heads, dropout=dropout) for _ in range(num_layers))
             )
-            self.mlp_head = nn.Sequential(nn.LayerNorm(2*embed_dim), nn.Linear(2*embed_dim, num_classes))
+
+
+            # If regression or classification
+            if self.regression:
+                self.mlp_head = nn.Sequential(
+                    nn.LayerNorm(2*embed_dim),
+                    nn.Linear(2*embed_dim, 2*embed_dim, bias=False),
+                    nn.Dropout(dropout),
+                    nn.Linear(2*embed_dim, num_classes, bias=False) 
+                )
+
+            else:
+                self.mlp_head = nn.Sequential(nn.LayerNorm(2*embed_dim), nn.Linear(2*embed_dim, num_classes))
+
             self.dropout = nn.Dropout(dropout)
 
             # Parameters/Embeddings
@@ -980,7 +999,22 @@ class VisionTransformer(nn.Module):
             self.transformer = nn.Sequential(
                 *(AttentionBlock(embed_dim, hidden_dim, num_heads, dropout=dropout) for _ in range(num_layers))
             )
-            self.mlp_head = nn.Sequential(nn.LayerNorm(embed_dim),nn.Linear(embed_dim, embed_dim), nn.Linear(embed_dim, num_classes))
+
+            # If regression or classification
+
+            if self.regression:
+                self.mlp_head = nn.Sequential(
+                    nn.LayerNorm(2*embed_dim),
+                    nn.Linear(2*embed_dim, 2*embed_dim, bias=False),
+                    nn.Dropout(dropout),
+                    nn.Linear(2*embed_dim, num_classes, bias=False) 
+                )
+
+            else:
+                self.mlp_head = nn.Sequential(nn.LayerNorm(embed_dim),
+                                              nn.Linear(embed_dim, embed_dim),
+                                              nn.Linear(embed_dim, num_classes))
+            
             self.dropout = nn.Dropout(dropout)
 
             # Parameters/Embeddings
@@ -1067,7 +1101,15 @@ class VisionTransformer(nn.Module):
         
         # Perform classification prediction
         cls = x[0]
-        out = self.mlp_head(cls)
+
+        # If regression or classification
+        # with if in case necessary in the future
+        if self.regression:
+
+            out = self.mlp_head(cls)
+
+        else:
+            out = self.mlp_head(cls)
 
         return out
     
