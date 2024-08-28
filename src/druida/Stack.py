@@ -484,22 +484,24 @@ class Discriminator(nn.Module):
 
 #Build a Diffusion  model pipeline
 
-# http://layer-calc.com/
+# 256
 class Generator_V2(nn.Module):
-    def __init__(self, ngpu,spectra_input_size,latent_size, mapping_size,initial_depth, channels, leakyRelu_flag ):
+    def __init__(self, imagesize, ngpu,spectra_input_size,latent_size, mapping_size,initial_depth, channels, leakyRelu_flag ):
         super(Generator_V2, self).__init__()
         
 
         self.checkDevice()
         self.spectra_len=spectra_input_size
         self.latent_len=latent_size
-        self.ngpu = ngpu            
+        self.ngpu = ngpu   
+        self.imagesize = imagesize            
+         
         # 512 canales de entrada
         self.depth=initial_depth#512
         self.l1 = nn.Linear(self.spectra_len, 4*4*self.depth, bias=False)            
         self.l2 = nn.Linear(self.latent_len, 4*4*self.depth, bias=False)            
 
-        self.conv1 = nn.ConvTranspose2d(self.depth*2, mapping_size * 8, 5, 1, 0, bias=False)
+        self.conv1 = nn.ConvTranspose2d(self.depth*2, mapping_size * 68, 5, 1, 0, bias=False)
         self.conv2 = nn.BatchNorm2d(num_features=mapping_size * 8)
         if leakyRelu_flag:
             self.conv3 = nn.ReLU(True)
@@ -515,11 +517,25 @@ class Generator_V2(nn.Module):
 
         self.conv4 = nn.ConvTranspose2d(mapping_size * 8, mapping_size * 4, 6, 2, 2, bias=False)
         self.conv5 = nn.BatchNorm2d(mapping_size * 4)
+
         self.conv7 = nn.ConvTranspose2d(mapping_size * 4, mapping_size * 2, 6, 2, 2, bias=False)
         self.conv8 = nn.BatchNorm2d(mapping_size * 2)
+
         self.conv10 = nn.ConvTranspose2d(mapping_size * 2, mapping_size, 6, 2, 2, bias=False)
         self.conv11 = nn.BatchNorm2d(mapping_size)
-        self.conv13 = nn.ConvTranspose2d(mapping_size, channels, 5, 1, 2, bias=False)
+
+        if self.imagesize==128:
+            self.conv13_1 = nn.ConvTranspose2d(mapping_size, 32, 6, 2, 2, bias=False)
+            self.conv14_1 = nn.BatchNorm2d(32)
+            self.conv15_1 = nn.LeakyReLU(0.2)
+
+            self.conv13 = nn.ConvTranspose2d(32, channels, 5, 1, 2, bias=False)
+
+        else:
+
+            self.conv13 = nn.ConvTranspose2d(mapping_size, channels, 5, 1, 2, bias=False)
+
+
         self.conv14 = nn.Tanh()
 
     def forward(self, input, latent, b_size):
@@ -553,7 +569,17 @@ class Generator_V2(nn.Module):
         imageOut = self.conv10(imageOut)
         imageOut = self.conv11(imageOut)
         imageOut = self.conv12(imageOut)
-        imageOut = self.conv13(imageOut)
+
+        if self.imagesize==128:
+            imageOut = self.conv13_1(imageOut)
+            imageOut = self.conv14_1(imageOut)
+            imageOut = self.conv15_1(imageOut)
+            imageOut = self.conv13(imageOut)
+
+        else:
+
+            imageOut = self.conv13(imageOut)
+
         imageOut = self.conv14(imageOut)               
         return imageOut
 
@@ -595,7 +621,16 @@ class Discriminator_V2(nn.Module):
         self.conv9 = nn.Conv2d(discriminator_mapping_size * 4, discriminator_mapping_size * 8, 6, 2, 2, bias=False)
         self.conv10 = nn.BatchNorm2d(discriminator_mapping_size * 8)
         self.conv11 = nn.LeakyReLU(0.2, inplace=True)
-        self.conv12 = nn.Conv2d(discriminator_mapping_size * 8, 1, 6, 1, 0, bias=False)
+
+        if self.image_size==128:
+            self.conv12_1 = nn.Conv2d(discriminator_mapping_size * 8, 512, 6, 2, 2, bias=False)
+            self.conv12_2 = nn.LeakyReLU(0.2, inplace=True)
+                       
+            self.conv12_3 = nn.Conv2d(512, 1, 6, 2, 1, bias=False)
+
+        else:
+            self.conv12 = nn.Conv2d(discriminator_mapping_size * 8, 1, 6, 1, 0, bias=False)
+
         self.conv13 = nn.Sigmoid()
 
 
@@ -625,7 +660,16 @@ class Discriminator_V2(nn.Module):
         combine = self.conv9(combine)
         combine = self.conv10(combine)
         combine = self.conv11(combine)
-        combine = self.conv12(combine)
+
+        if self.image_size==128:
+            combine = self.conv12_1(combine)
+            combine = self.conv12_2(combine)
+            combine = self.conv12_3(combine)
+
+
+        else:
+            combine = self.conv12(combine)
+
         combine = self.conv13(combine)
         return combine
 
@@ -677,6 +721,8 @@ class Predictor_CNN(nn.Module):
 
         elif image_size==512:
             self.l2 = nn.Linear(139392, hiden_num, bias=False)           
+        elif image_size==64:
+            self.l2 = nn.Linear(3200, hiden_num, bias=False)           
         
         #self.l3 = nn.Linear(hiden_num, features_num, bias=False)           
         self.dropout2 = nn.Dropout(dropout)
@@ -722,13 +768,15 @@ class Predictor_CNN(nn.Module):
         """Change between conv to linear layers"""
 
         combine =combine.view(combine.size(0), -1)
-        print(combine.shape)
         combine = self.l2(combine)
         #combine = self.l3(combine)
 
         combine = self.dropout2(combine)
 
         combine = self.l4(combine)
+        
+        combine = self.dropout2(combine)
+
         combine = self.l5(combine)
         combine = self.l6(combine)
 
@@ -835,9 +883,9 @@ class Predictor_RESNET(nn.Module):
 
             combine = torch.cat((x1,x2),dim=1) # concatenate in a given dimension
         
-            outmap_min, _ = torch.min(combine, dim=1, keepdim=True)
-            outmap_max, _ = torch.max(combine, dim=1, keepdim=True)
-            combine = (combine - outmap_min) / (outmap_max - outmap_min) 
+            #outmap_min, _ = torch.min(combine, dim=1, keepdim=True)
+            #outmap_max, _ = torch.max(combine, dim=1, keepdim=True)
+            #combine = (combine - outmap_min) / (outmap_max - outmap_min) 
 
             combine = self.model(combine) #This conv1 considers 2 x channels from the combine
         
@@ -889,7 +937,7 @@ class Diffusion:
         return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * Ɛ, Ɛ
 
     def sample_timesteps(self, n):
-
+#
         return torch.randint(low=1, high=self.noise_steps, size=(n,))
 
 
