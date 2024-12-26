@@ -59,6 +59,7 @@ def get_data_with_labels(image_size,resize, randomResize, dataset_path,batch_siz
         torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
 
+
     cursomDataset = datamanager.CustomDataset(dataset_path,transforms,filter)
 
     # if not (filter is None):

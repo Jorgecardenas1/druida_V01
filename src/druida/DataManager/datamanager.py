@@ -129,6 +129,7 @@ class CustomDataset(Dataset):
         self.root = root
         self.dataset =  torchvision.datasets.ImageFolder(root=self.root, transform=transforms)
         self.filter=filter
+        
     def __getitem__(self, index):
        
         
@@ -146,9 +147,36 @@ class CustomDataset(Dataset):
             class_name=name.split('_')[0].split('/')
 
         return data,target,os.path.basename(self.dataset.imgs[index][0]),class_name[-1]
-            
+        
+
+    def __len__(self):
+        return len(self.dataset)
+    
+class CustomDatasetIterative(Dataset):
+    def __init__(self, root, transforms,filter):
+
+        super(CustomDataset,self).__init__()
+        self.root = root
+        self.dataset =  torchvision.datasets.ImageFolder(root=self.root, transform=transforms)
+        self.filter=filter
+    def __getitem__(self, index):
+       
+        
+        for i in range(100):
+        
+            data, target = self.dataset[index]
+            index = index
+            name=self.dataset.imgs[index][0]
+            class_name=""
 
 
+            if "\\" in name:
+                class_name=name.split('_')[0].split('\\')
+
+            else:
+                class_name=name.split('_')[0].split('/')
+
+        return data,target,os.path.basename(self.dataset.imgs[index][0]),class_name[-1]
         
 
     def __len__(self):

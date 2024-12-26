@@ -501,7 +501,7 @@ class Generator_V2(nn.Module):
         self.l1 = nn.Linear(self.spectra_len, 4*4*self.depth, bias=False)            
         self.l2 = nn.Linear(self.latent_len, 4*4*self.depth, bias=False)            
 
-        self.conv1 = nn.ConvTranspose2d(self.depth*2, mapping_size * 68, 5, 1, 0, bias=False)
+        self.conv1 = nn.ConvTranspose2d(self.depth*2, mapping_size * 8, 5, 1, 0, bias=False)
         self.conv2 = nn.BatchNorm2d(num_features=mapping_size * 8)
         if leakyRelu_flag:
             self.conv3 = nn.ReLU(True)
@@ -530,9 +530,151 @@ class Generator_V2(nn.Module):
             self.conv15_1 = nn.LeakyReLU(0.2)
 
             self.conv13 = nn.ConvTranspose2d(32, channels, 5, 1, 2, bias=False)
+        elif self.imagesize==256:
+            self.conv13_1 = nn.ConvTranspose2d(mapping_size, 32, 6, 2, 2, bias=False)
+            self.conv14_1 = nn.BatchNorm2d(32)
+            self.conv15_1 = nn.LeakyReLU(0.2)
+
+            self.conv13_2 = nn.ConvTranspose2d(32, 16, 6, 2, 2, bias=False)
+            self.conv14_2 = nn.BatchNorm2d(32)
+            self.conv15_2 = nn.LeakyReLU(0.2)
+
+            self.conv13_3 = nn.ConvTranspose2d(16, 8, 6, 2, 2, bias=False)
+            self.conv14_3 = nn.BatchNorm2d(32)
+            self.conv15_3 = nn.LeakyReLU(0.2)
+
+            self.conv13 = nn.ConvTranspose2d(8, channels, 5, 1, 2, bias=False)
 
         else:
 
+            self.conv13 = nn.ConvTranspose2d(mapping_size, channels, 5, 1, 2, bias=False)
+
+
+        self.conv14 = nn.Tanh()
+
+    def forward(self, input, latent, b_size):
+
+        x_condspectra = self.l1(input) #Size must be taken care = 800 in this case
+        x_latent = self.l2(latent) #Size must be taken care = 800 in this case
+
+        if self.ngpu == 0 :
+        
+            x_condspectra = x_condspectra.reshape(int(b_size),self.depth,4,4) 
+            x_latent = x_latent.reshape(int(b_size),self.depth,4,4) 
+
+        else:
+            x_condspectra = x_condspectra.reshape(int(b_size/self.ngpu),self.depth,4,4) 
+            x_latent = x_latent.reshape(int(b_size/self.ngpu),self.depth,4,4) 
+
+        combine = torch.cat((x_latent,x_condspectra),dim=1) # concatenate in a given dimension
+        #esto viene d
+
+        imageOut = combine
+
+        imageOut = self.conv1(imageOut)
+        imageOut = self.conv2(imageOut)
+        imageOut = self.conv3(imageOut)
+        imageOut = self.conv4(imageOut)
+        imageOut = self.conv5(imageOut)
+        imageOut = self.conv6(imageOut)
+        imageOut = self.conv7(imageOut)
+        imageOut = self.conv8(imageOut)
+        imageOut = self.conv9(imageOut)
+        imageOut = self.conv10(imageOut)
+        imageOut = self.conv11(imageOut)
+        imageOut = self.conv12(imageOut)
+
+        if self.imagesize==128:
+            imageOut = self.conv13_1(imageOut)
+            imageOut = self.conv14_1(imageOut)
+            imageOut = self.conv15_1(imageOut)
+            imageOut = self.conv13(imageOut)
+        elif self.imagesize==512:
+            imageOut = self.conv13_1(imageOut)
+            imageOut = self.conv14_1(imageOut)
+            imageOut = self.conv15_1(imageOut)
+
+            imageOut = self.conv13_2(imageOut)
+            imageOut = self.conv14_2(imageOut)
+            imageOut = self.conv15_2(imageOut)
+
+            imageOut = self.conv13_3(imageOut)
+            imageOut = self.conv14_3(imageOut)
+            imageOut = self.conv15_3(imageOut)
+
+            imageOut = self.conv13(imageOut)
+        else:
+
+            imageOut = self.conv13(imageOut)
+
+        imageOut = self.conv14(imageOut)               
+        return imageOut
+
+    def checkDevice(self):
+        self.device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+        )
+    
+# GEnerator 3 goes directly to 128 shapes
+class Generator_V3(nn.Module):
+    def __init__(self, imagesize, ngpu,spectra_input_size,latent_size, mapping_size,initial_depth, channels, leakyRelu_flag ):
+        super(Generator_V2, self).__init__()
+        
+
+        self.checkDevice()
+        self.spectra_len=spectra_input_size
+        self.latent_len=latent_size
+        self.ngpu = ngpu   
+        self.imagesize = imagesize            
+         
+        # 512 canales de entrada
+        self.depth=initial_depth#512
+        self.l1 = nn.Linear(self.spectra_len, 4*4*self.depth, bias=False)            
+        self.l2 = nn.Linear(self.latent_len, 4*4*self.depth, bias=False)            
+
+        self.conv1 = nn.ConvTranspose2d(self.depth*2, mapping_size * 8, 5, 1, 0, bias=False)
+        self.conv2 = nn.BatchNorm2d(num_features=mapping_size * 8)
+        if leakyRelu_flag:
+            self.conv3 = nn.ReLU(True)
+            self.conv6 = nn.ReLU(True)
+            self.conv9 = nn.ReLU(True)
+            self.conv12 = nn.ReLU(True)
+
+        else:
+            self.conv3 = nn.LeakyReLU(0.2)
+            self.conv6 = nn.LeakyReLU(0.2)
+            self.conv9 = nn.LeakyReLU(0.2)
+            self.conv12 = nn.LeakyReLU(0.2)
+
+        self.conv4 = nn.ConvTranspose2d(mapping_size * 8, mapping_size * 4, 6, 2, 2, bias=False)
+        self.conv5 = nn.BatchNorm2d(mapping_size * 4)
+
+        
+
+        if self.imagesize==128:
+
+            self.conv7 = nn.ConvTranspose2d(mapping_size * 4, mapping_size * 2, 6, 2, 2, bias=False)
+            self.conv8 = nn.BatchNorm2d(mapping_size * 2)
+
+            self.conv10 = nn.ConvTranspose2d(mapping_size * 2, mapping_size, 6, 2, 2, bias=False)
+            self.conv11 = nn.BatchNorm2d(mapping_size)
+            self.conv13_1 = nn.ConvTranspose2d(mapping_size, 32, 6, 2, 2, bias=False)
+            self.conv14_1 = nn.BatchNorm2d(32)
+            self.conv15_1 = nn.LeakyReLU(0.2)
+
+            self.conv13 = nn.ConvTranspose2d(32, channels, 5, 1, 2, bias=False)
+
+        else:
+            # 64x64 images
+            self.conv7 = nn.ConvTranspose2d(mapping_size * 4, mapping_size * 2, 6, 2, 2, bias=False)
+            self.conv8 = nn.BatchNorm2d(mapping_size * 2)
+
+            self.conv10 = nn.ConvTranspose2d(mapping_size * 2, mapping_size, 6, 2, 2, bias=False)
+            self.conv11 = nn.BatchNorm2d(mapping_size)
             self.conv13 = nn.ConvTranspose2d(mapping_size, channels, 5, 1, 2, bias=False)
 
 
@@ -591,13 +733,12 @@ class Generator_V2(nn.Module):
         if torch.backends.mps.is_available()
         else "cpu"
         )
-    
 
 #Build a Discriminator for GAN stack 
 
 class Discriminator_V2(nn.Module):
     def __init__(self,label_length, ngpu=0, image_size=32, discriminator_mapping_size=0, channels=3):
-        super(Discriminator, self).__init__()
+        super(Discriminator_V2, self).__init__()
 
         
         self.checkDevice()
@@ -628,6 +769,18 @@ class Discriminator_V2(nn.Module):
                        
             self.conv12_3 = nn.Conv2d(512, 1, 6, 2, 1, bias=False)
 
+        elif self.image_size==512:
+            self.conv12_1_1 = nn.Conv2d(discriminator_mapping_size * 8, 512, 6, 2, 2, bias=False)
+            self.conv12_2_1 = nn.LeakyReLU(0.2, inplace=True)
+                       
+            self.conv12_1_2 = nn.Conv2d(512, 1024, 6, 2, 2, bias=False)
+            self.conv12_2_2 = nn.LeakyReLU(0.2, inplace=True)
+
+            self.conv12_1_3 = nn.Conv2d(1024,2048, 6, 2, 2, bias=False)
+            self.conv12_2_3 = nn.LeakyReLU(0.2, inplace=True)
+
+
+            self.conv12_3 = nn.Conv2d(2048, 1, 6, 1, 1, bias=False)
         else:
             self.conv12 = nn.Conv2d(discriminator_mapping_size * 8, 1, 6, 1, 0, bias=False)
 
@@ -666,6 +819,19 @@ class Discriminator_V2(nn.Module):
             combine = self.conv12_2(combine)
             combine = self.conv12_3(combine)
 
+        elif self.image_size==512:
+
+            combine = self.conv12_1_1(combine)
+            combine = self.conv12_2_1(combine)
+
+            combine = self.conv12_1_2(combine)
+            combine = self.conv12_2_2(combine)
+
+            combine = self.conv12_1_3(combine)
+            combine = self.conv12_2_3(combine)
+
+
+            combine = self.conv12_3(combine)
 
         else:
             combine = self.conv12(combine)
