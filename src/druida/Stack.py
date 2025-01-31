@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torchvision.models import resnet50, ResNet50_Weights, resnet152
+from torchvision.models import resnet18, resnet50, ResNet50_Weights, resnet152
 import torchvision
 
 sys.path.insert(0, '../druida_V01/src/')
@@ -530,17 +530,31 @@ class Generator_V2(nn.Module):
             self.conv15_1 = nn.LeakyReLU(0.2)
 
             self.conv13 = nn.ConvTranspose2d(32, channels, 5, 1, 2, bias=False)
+        
         elif self.imagesize==256:
             self.conv13_1 = nn.ConvTranspose2d(mapping_size, 32, 6, 2, 2, bias=False)
             self.conv14_1 = nn.BatchNorm2d(32)
             self.conv15_1 = nn.LeakyReLU(0.2)
 
             self.conv13_2 = nn.ConvTranspose2d(32, 16, 6, 2, 2, bias=False)
-            self.conv14_2 = nn.BatchNorm2d(32)
+            self.conv14_2 = nn.BatchNorm2d(16)
+            self.conv15_2 = nn.LeakyReLU(0.2)
+
+            
+
+            self.conv13 = nn.ConvTranspose2d(16, channels, 5, 1, 2, bias=False)
+
+        elif self.imagesize==512:
+            self.conv13_1 = nn.ConvTranspose2d(mapping_size, 32, 6, 2, 2, bias=False)
+            self.conv14_1 = nn.BatchNorm2d(32)
+            self.conv15_1 = nn.LeakyReLU(0.2)
+
+            self.conv13_2 = nn.ConvTranspose2d(32, 16, 6, 2, 2, bias=False)
+            self.conv14_2 = nn.BatchNorm2d(16)
             self.conv15_2 = nn.LeakyReLU(0.2)
 
             self.conv13_3 = nn.ConvTranspose2d(16, 8, 6, 2, 2, bias=False)
-            self.conv14_3 = nn.BatchNorm2d(32)
+            self.conv14_3 = nn.BatchNorm2d(8)
             self.conv15_3 = nn.LeakyReLU(0.2)
 
             self.conv13 = nn.ConvTranspose2d(8, channels, 5, 1, 2, bias=False)
@@ -589,6 +603,20 @@ class Generator_V2(nn.Module):
             imageOut = self.conv14_1(imageOut)
             imageOut = self.conv15_1(imageOut)
             imageOut = self.conv13(imageOut)
+
+        elif self.imagesize==256:
+            imageOut = self.conv13_1(imageOut)
+            imageOut = self.conv14_1(imageOut)
+            imageOut = self.conv15_1(imageOut)
+
+            imageOut = self.conv13_2(imageOut)
+            imageOut = self.conv14_2(imageOut)
+            imageOut = self.conv15_2(imageOut)
+
+
+
+            imageOut = self.conv13(imageOut)
+
         elif self.imagesize==512:
             imageOut = self.conv13_1(imageOut)
             imageOut = self.conv14_1(imageOut)
@@ -769,18 +797,31 @@ class Discriminator_V2(nn.Module):
                        
             self.conv12_3 = nn.Conv2d(512, 1, 6, 2, 1, bias=False)
 
-        elif self.image_size==512:
+        elif self.image_size==256:
             self.conv12_1_1 = nn.Conv2d(discriminator_mapping_size * 8, 512, 6, 2, 2, bias=False)
             self.conv12_2_1 = nn.LeakyReLU(0.2, inplace=True)
-                       
+            self.conv10_1 = nn.BatchNorm2d(discriminator_mapping_size * 16)
+
+
             self.conv12_1_2 = nn.Conv2d(512, 1024, 6, 2, 2, bias=False)
             self.conv12_2_2 = nn.LeakyReLU(0.2, inplace=True)
 
-            self.conv12_1_3 = nn.Conv2d(1024,2048, 6, 2, 2, bias=False)
+            self.conv12_3 = nn.Conv2d(1024, 1, 6, 2, 1, bias=False)
+
+        elif self.image_size==512:
+            self.conv12_1_1 = nn.Conv2d(discriminator_mapping_size * 8, 512, 6, 2, 2, bias=False)
+            self.conv12_2_1 = nn.LeakyReLU(0.2, inplace=True)
+            self.conv10_1 = nn.BatchNorm2d(discriminator_mapping_size * 16)
+
+
+            self.conv12_1_2 = nn.Conv2d(512, 1024, 6, 2, 2, bias=False)
+            self.conv12_2_2 = nn.LeakyReLU(0.2, inplace=True)
+            self.conv10_2 = nn.BatchNorm2d(discriminator_mapping_size * 32)
+
+            self.conv12_1_3 = nn.Conv2d(1024, 2048, 2, 2, 1, bias=False)
             self.conv12_2_3 = nn.LeakyReLU(0.2, inplace=True)
 
-
-            self.conv12_3 = nn.Conv2d(2048, 1, 6, 1, 1, bias=False)
+            self.conv12_3 = nn.Conv2d(2048, 1, 6, 2, 1, bias=False)
         else:
             self.conv12 = nn.Conv2d(discriminator_mapping_size * 8, 1, 6, 1, 0, bias=False)
 
@@ -818,18 +859,31 @@ class Discriminator_V2(nn.Module):
             combine = self.conv12_1(combine)
             combine = self.conv12_2(combine)
             combine = self.conv12_3(combine)
+        elif self.image_size==256:
+
+            combine = self.conv12_1_1(combine)
+            combine = self.conv12_2_1(combine)
+            combine = self.conv10_1(combine)
+
+            combine = self.conv12_1_2(combine)
+            combine = self.conv12_2_2(combine)
+    
+
+            combine = self.conv12_3(combine)
+            #print(combine.shape)
 
         elif self.image_size==512:
 
             combine = self.conv12_1_1(combine)
             combine = self.conv12_2_1(combine)
+            combine = self.conv10_1(combine)
 
             combine = self.conv12_1_2(combine)
             combine = self.conv12_2_2(combine)
+            combine = self.conv10_2(combine)
 
             combine = self.conv12_1_3(combine)
             combine = self.conv12_2_3(combine)
-
 
             combine = self.conv12_3(combine)
 
@@ -1013,6 +1067,118 @@ class Predictor_RESNET(nn.Module):
                 nn.Linear(features_num, hiden_num, bias=False),
                 nn.Dropout(dropout),
                 nn.Linear(hiden_num, Y_prediction_size, bias=False)           
+            )
+        
+        self.model.fc =self.linear
+        
+        #torch.nn.init.xavier_uniform_(self.model.fc.weight)
+
+
+    def forward(self, input_, conditioning, b_size):
+        x1 = input_
+        #the output is imagesize x imagesize x channel
+        #hence the need of reshape 
+        #print(x2.shape)
+        #We can tray as many channels as prefered. In this case I will try 1 channel
+        num_channel=self.cond_channels
+
+        if self.conditional:
+            
+            x2 = self.l1(conditioning) #Size must be taken care = 800 in this case
+            m = nn.Tanh()
+            x2 = m(x2)
+
+            if self.ngpu == 0 :
+            
+                x2 = x2.reshape(int(b_size),num_channel,self.image_size,self.image_size) 
+                
+            else:
+                x2 = x2.reshape(int(b_size/self.ngpu),num_channel,self.image_size,self.image_size)
+
+            # if self.cond_channels==3:
+            #     x2 = torchvision.transforms.Normalize([0.6, ], [0.3, ],[0.8,])(x2)
+            # else:
+            #     x2 = torchvision.transforms.Normalize([0.2, ], [0.1, ],[0.3,])(x2)
+
+
+            combine = torch.cat((x1,x2),dim=1) # concatenate in a given dimension
+        
+            #outmap_min, _ = torch.min(combine, dim=1, keepdim=True)
+            #outmap_max, _ = torch.max(combine, dim=1, keepdim=True)
+            #combine = (combine - outmap_min) / (outmap_max - outmap_min) 
+
+            combine = self.model(combine) #This conv1 considers 2 x channels from the combine
+        
+            """Change between conv to linear layers"""
+            return combine
+        else:
+            return self.model(x1)
+
+    def checkDevice(self):
+        self.device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+        )
+    
+
+
+class Predictor_RESNET_V2(nn.Module):
+    def __init__(self,resnet_arch,conditional, cond_input_size,cond_channels, ngpu=0, image_size=512 , output_size=0, channels=3,features_num=1000, hiden_num=5000, dropout=0.2, Y_prediction_size=601):
+        super(Predictor_RESNET_V2, self).__init__()
+
+        
+        self.checkDevice()
+
+        self.ngpu = ngpu            
+        self.image_size = image_size
+        self.channels = channels
+        self.features_num = features_num
+        self.dropout=dropout
+        self.cond_channels=cond_channels
+
+        self.l1 = nn.Linear(cond_input_size, image_size*image_size*cond_channels, bias=False)           
+
+        #weights = ResNet50_Weights.DEFAULT
+        if resnet_arch=="resnet50":
+            self.model = resnet50(pretrained=False)
+        elif resnet_arch == "resnet18":
+            self.model = resnet18(pretrained=False)
+
+        else:
+            self.model = resnet152(pretrained=False)
+
+
+
+        self.conditional=conditional
+        num_filters = self.model.conv1.out_channels   
+        kernel_size = self.model.conv1.kernel_size
+        stride = self.model.conv1.stride
+        padding = self.model.conv1.padding
+
+        if self.conditional==True:
+            conv1 = torch.nn.Conv2d(self.cond_channels+self.channels, num_filters, kernel_size=kernel_size, stride=stride, padding=padding)
+            # Initialize the new conv1 layer's weights by averaging the pretrained weights across the channel dimension
+            #original_weights = self.model.conv1.weight.data.mean(dim=1, keepdim=True)
+            # Expand the averaged weights to the number of input channels of the new dataset
+            #conv1.weight.data = original_weights.repeat(1, 6, 1, 1)
+        else:
+            conv1 = torch.nn.Conv2d(self.channels, num_filters, kernel_size=kernel_size, stride=stride, padding=padding)
+            # Initialize the new conv1 layer's weights by averaging the pretrained weights across the channel dimension
+            #original_weights = self.model.conv1.weight.data.mean(dim=1, keepdim=True)
+            # Expand the averaged weights to the number of input channels of the new dataset
+            #conv1.weight.data = original_weights.repeat(1, 3, 1, 1)        # Substitute the FC output layer
+
+        self.model.conv1 = conv1
+
+        self.linear = nn.Sequential(
+                nn.Linear(self.model.fc.in_features, features_num, bias=False),
+                nn.Linear(features_num, hiden_num, bias=False),
+                nn.Linear(hiden_num, Y_prediction_size, bias=False),  
+                #nn.Tanh()
+         
             )
         
         self.model.fc =self.linear
